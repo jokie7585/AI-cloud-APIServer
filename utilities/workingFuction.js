@@ -1,0 +1,219 @@
+// nodejs require
+var fs = require('fs');
+var ph = require('path');
+var jsYaml = require('js-yaml')
+const fsPromise = fs.promises;
+var {spawnSync} = require('child_process')
+
+// 查詢根目錄內某user的目錄
+function LS(userDir, path='/' ,cb) {
+    let Path = '';
+    if(process.env.ROOTPATH) {
+        Path = Path + process.env.ROOTPATH;
+    }
+    // 若用戶端想訪問指定用戶的root會使用root當path,但實際上並沒有這個path
+    console.log('In LS() path is: ' + path);
+    path = path.replace('/root', '');
+
+    Path = Path + userDir + path;
+    
+    fs.readdir(Path, {withFileTypes: true}, (err, files) =>{
+        if(!err) {
+            let payLoad = files.map(el => {
+                if(el.isDirectory()) {
+                    return({
+                        name: el.name,
+                        type: 'dir'
+                    })
+                }
+                else if(el.isFile()) {
+                    return({
+                        name: el.name,
+                        type: 'file'
+                    })
+                }
+                else{
+                    throw new Error('exception in Utility.workingFunction.LS');
+                }
+            })
+            
+            cb(payLoad);
+        }
+        else{
+            console.error(err);
+        }
+        
+    })
+};
+
+async function CreateUserRootFolder(UserId) {
+    let path = process.env.ROOTPATH || process.cwd()
+    path = path + '/' + UserId
+
+    await fsPromise.mkdir(path)
+    .then(()=> {
+        console.log(path + 'is created')
+    })
+    .catch(err => {
+        if(err) throw err;
+    })
+} 
+
+
+
+async function RunWorkspace(payload) {
+    let {userId, WsName} = payload;
+    let secretePath = ph.join(process.env.ROOTPATH,userId,WsName,'.secrete');
+    let yamlPath = ph.join(secretePath, 'podConfig.yaml')
+    let scriptPath = ph.join(secretePath, 'script_preparePod.sh')
+    await fsPromise.access(yamlPath)
+    .catch(err => {
+        throw 'server side error ouccur, plz contactus'
+    })
+    console.log('sync run:' + scriptPath);
+    let buf = spawnSync('sh', [scriptPath]);
+    // console.log(buf.stdout.toString())
+    console.log(buf.stderr.toString())
+    return 'success run script!'
+}
+
+// yaml creater fuction set
+
+async function GenerateYaml(payLoad) {
+    let {userId, config, scheduleList, WsName,credential} = payLoad;
+    let workspaceRoot = ph.join(process.env.ROOTPATH,userId,WsName).toString();
+    console.log('volumes path :')
+    console.log(workspaceRoot)
+    let {tensorflowVersion} = config;
+    // yaml Template
+    let yaml = {
+        apiVersion: "v1",
+        kind: "Pod",
+        metadata: {
+            name: userId+'-'+WsName, // userId as name
+            labels: {
+                app: "tensorflow-runtime"
+            }
+        },
+        spec: {
+            restartPolicy: "Never",
+            containers: [
+                {
+                    name: "tensorflow-runtime",
+                    image: "tensorflow/tensorflow:" + tensorflowVersion, // tensorflowVersion
+                    env: [
+                        {
+                            name: "APISERVER_IP",
+                            value: process.env.APISERVER_IP
+                        },
+                        {
+                            name: "USERID",
+                            value: userId
+                        },
+                        {
+                            name: "WsName",
+                            value: WsName
+                        },
+                        {
+                            name: "Session_Token",
+                            value: credential
+                        }
+                    ],
+                    imagePullPolicy: "IfNotPresent",
+                    command: ["/bin/sh"],
+                    args: createBashArgs(scheduleList), // generat bash args
+                    volumeMounts: [
+                        {
+                            mountPath: "/tmp/",
+                            name: "work-space"
+                        }
+                    ]
+                }
+            ],
+            volumes: [
+                {
+                    name: "work-space",
+                    hostPath: {
+                        path: workspaceRoot, // workspaceRoot here
+                        type: "Directory"
+                    }
+                }
+            ]
+        }
+    }
+
+    // 寫入指定資料夾
+    let target = ph.join(workspaceRoot, '.secrete', 'podConfig.yaml');
+    let yamlStream = jsYaml.dump(yaml, jsYaml.JSON_SCHEMA)
+    let fileHandler = await fsPromise.open(target, 'w+');
+    console.log('start write')
+    await fileHandler.writeFile(yamlStream)
+    console.log('end write')
+    await fileHandler.close();
+    return 'success create - podConfig.yaml';
+}
+
+function createBashArgs(ScheduleList) {
+    let args = ["-c"];
+    let shellScript = '';
+    // 編輯指令
+    // 切換至容器工作區
+    shellScript = shellScript.concat('cd /tmp;');
+
+    for (exe of ScheduleList) {
+        let {ext} = ph.parse(exe);
+        if(ext === '.py') {
+            shellScript = shellScript.concat('python3 ' +exe + ';');
+        }
+    }
+    // 未來可在這邊加上通知的 curl 請求
+    // 結束shell
+    shellScript = shellScript.concat('done');
+    args.push(shellScript);
+    console.log('finish args set: ')
+    console.log(args);
+    return args;
+}
+
+async function CreateWorkspace(payload) {
+    let {WSName, UserId} = payload;
+    if(WSName === '') throw 'Workspace name cannot be empty!'
+    let path = ph.join(process.env.ROOTPATH, UserId, WSName);
+    await fsPromise.mkdir(path).catch(err=> {
+        throw 'workspace is already Exist! plz use another name!'
+    })
+    // 產生secret dir
+    path = ph.join(path, '.secrete')
+    await fsPromise.mkdir(path)
+    // 產生腳本
+    await CreateRunWorkspaceScript(payload)
+    .catch(err=> {
+        fsPromise.unlink(path);
+        throw 'serverside Error occur! plz contact us'
+    })
+    return 'Success create workspace'
+}
+
+async function CreateRunWorkspaceScript(payLoad) {
+    let {WSName, UserId} = payLoad;
+    let targetPath = ph.join(process.env.ROOTPATH, UserId, WSName, '.secrete');
+    let yamlPath = ph.join(targetPath,  'podConfig.yaml');
+    let scriptPath = ph.join(targetPath,  'script_preparePod.sh');
+    // 生成script
+    let script = `kubectl create -f ${yamlPath}`
+    // 寫入script
+    let fileHandler = await fsPromise.open(scriptPath, 'w+');
+    console.log('start write script')
+    await fileHandler.writeFile(script)
+    console.log('end write script')
+    await fileHandler.close();
+    return script;
+}
+
+
+
+
+module.exports = {
+    LS, CreateUserRootFolder,RunWorkspace,CreateWorkspace,GenerateYaml
+}
+

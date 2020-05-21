@@ -1,0 +1,18 @@
+<h1>{{title}}</h1>
+<p>Welcome to {{title}}</p>
+<div>
+    <form enctype="multipart/form-data" method="POST" action="/fileSystem/upload" target="_parent">
+        <input type="file" name="targetfile">
+        <input type="submit" value="開始上傳">
+    </form>
+</div>
+
+<div>
+    <form action="/api/auth/login" enctype="text/plain" method="POST">
+        <label>userId</label>
+        <input type="text" id="userId" name="userId"><br>
+        <label>password</label>
+        <input type="text" id="password" name="password"><br>
+        <input type="submit" value="log in">
+    </form>
+</div>

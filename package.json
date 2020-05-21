@@ -1,0 +1,27 @@
+{
+  "name": "hello-express",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "PORT=3001 node ./bin/www",
+    "startdb": "docker run --name mongo4 -v $(pwd)/data:/data/db -d -p 27017:27017 --rm mongo:4.1"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "cors": "^2.8.5",
+    "debug": "~2.6.9",
+    "dotenv": "^8.2.0",
+    "express": "~4.16.1",
+    "hbs": "^4.1.0",
+    "http-errors": "~1.6.3",
+    "http-status": "^1.4.2",
+    "js-yaml": "^3.13.1",
+    "jsonwebtoken": "^8.5.1",
+    "lodash": "^4.17.15",
+    "mongodb": "^3.5.2",
+    "mongoose": "^5.9.12",
+    "morgan": "~1.9.1",
+    "multer": "^1.4.2",
+    "node-fetch": "^2.6.0"
+  }
+}
