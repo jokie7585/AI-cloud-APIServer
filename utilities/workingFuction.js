@@ -80,17 +80,22 @@ async function RunWorkspace(payload) {
 // yaml creater fuction set
 
 async function GenerateYaml(payLoad) {
-    let {userId, config, scheduleList, WsName,credential} = payLoad;
+    let {userId, config, scheduleList, WsName,credential,logPath,podName} = payLoad;
     let workspaceRoot = ph.join(process.env.ROOTPATH,userId,WsName).toString();
     console.log('volumes path :')
     console.log(workspaceRoot)
+    // normlized path in container
+    var getLogPathInContainer = new RegExp(/\.secrete.*/);
+    let logPathInContainer = logPath.match(getLogPathInContainer)[0];
+    // prepare config
+    let Podname = podName; // assign podName
     let {tensorflowVersion} = config;
     // yaml Template
     let yaml = {
         apiVersion: "v1",
         kind: "Pod",
         metadata: {
-            name: userId+'-'+WsName, // userId as name
+            name: Podname.toLocaleLowerCase(), // pod name should be lower case
             labels: {
                 app: "tensorflow-runtime"
             }
@@ -115,8 +120,13 @@ async function GenerateYaml(payLoad) {
                             value: WsName
                         },
                         {
+                            // this is the public key for k8s cluster to access apiserver
                             name: "Session_Token",
                             value: credential
+                        },
+                        {
+                            name: "LogPath",
+                            value: logPathInContainer
                         }
                     ],
                     imagePullPolicy: "IfNotPresent",
@@ -159,14 +169,24 @@ function createBashArgs(ScheduleList) {
     // 編輯指令
     // 切換至容器工作區
     shellScript = shellScript.concat('cd /tmp;');
-
+    // 殺出request告知server此pod成功啟動並更新資料庫
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
+    // 初始化logFile
+    shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
+    
     for (exe of ScheduleList) {
         let {ext} = ph.parse(exe);
         if(ext === '.py') {
-            shellScript = shellScript.concat('python3 ' +exe + ';');
+            shellScript = shellScript.concat('python ' + exe + ' >> $LogPath 2>&1;');
+        }
+        else if(ext === '.sh') {
+            shellScript = shellScript.concat('sh ' + exe + ' >> $LogPath 2>&1;');
         }
     }
-    // 未來可在這邊加上通知的 curl 請求
+    // 發出 curl 請求,通知server完成工作
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setFinish/$WsName ;`);
+    // 提示使用者是否執行完畢
+    shellScript = shellScript.concat('echo "\nConsole diconnected!..." >> $LogPath;');
     // 結束shell
     shellScript = shellScript.concat('done');
     args.push(shellScript);
@@ -180,19 +200,44 @@ async function CreateWorkspace(payload) {
     if(WSName === '') throw 'Workspace name cannot be empty!'
     let path = ph.join(process.env.ROOTPATH, UserId, WSName);
     await fsPromise.mkdir(path).catch(err=> {
+        console.log(err)
         throw 'workspace is already Exist! plz use another name!'
     })
     // 產生secret dir
     path = ph.join(path, '.secrete')
+    let logPath = ph.join(path, 'logs')
     await fsPromise.mkdir(path)
+    await fsPromise.mkdir(logPath)
     // 產生腳本
     await CreateRunWorkspaceScript(payload)
     .catch(err=> {
         fsPromise.unlink(path);
         throw 'serverside Error occur! plz contact us'
     })
-    return 'Success create workspace'
+    return WSName
 }
+
+async function DeleteWorkspace(payload) {
+    let {WSName, UserId} = payload;
+    let path = ph.join(process.env.ROOTPATH, UserId, WSName);
+    deleteFolderRecursive(path);
+    console.log('success recursive delete path: ' + path);
+    return WSName;
+}
+
+var deleteFolderRecursive = function(path) {
+    if( fs.existsSync(path) ) {
+        fs.readdirSync(path).forEach(function(file) {
+          var curPath = path + "/" + file;
+            if(fs.lstatSync(curPath).isDirectory()) { // recurse
+                deleteFolderRecursive(curPath);
+            } else { // delete file
+                fs.unlinkSync(curPath);
+            }
+        });
+        fs.rmdirSync(path);
+      }
+  };
 
 async function CreateRunWorkspaceScript(payLoad) {
     let {WSName, UserId} = payLoad;
@@ -201,6 +246,7 @@ async function CreateRunWorkspaceScript(payLoad) {
     let scriptPath = ph.join(targetPath,  'script_preparePod.sh');
     // 生成script
     let script = `kubectl create -f ${yamlPath}`
+    // 生成收集log行數的
     // 寫入script
     let fileHandler = await fsPromise.open(scriptPath, 'w+');
     console.log('start write script')
@@ -214,6 +260,6 @@ async function CreateRunWorkspaceScript(payLoad) {
 
 
 module.exports = {
-    LS, CreateUserRootFolder,RunWorkspace,CreateWorkspace,GenerateYaml
+    LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml
 }
 

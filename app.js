@@ -12,7 +12,7 @@ require('dotenv').config();
 const corsOption = {
   "origin": ["http://localhost:3000", process.env.FrontendIP, "http://192.168.43.219:3008"],
   "credentials": true,
-  "exposedHeaders":["Content-Disposition"]
+  "exposedHeaders":["Content-Disposition","X-AICLOUD-ENDLOG"]
 }
 
 // const MongoClient = require('mongodb').MongoClient;
