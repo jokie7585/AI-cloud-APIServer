@@ -3,8 +3,9 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {LS, DeleteWorkspace,CreateWorkspace, GenerateYaml,RunWorkspace} = require('../utilities/workingFuction.js');
+const {LS,LoadWSList , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
+const {AppError, errorType} = require('../utilities/AppError')
 
 
 function createRouter(dependencies = {}) {
@@ -381,35 +382,22 @@ function createRouter(dependencies = {}) {
                     
                     GenerateYaml(payLoad)
                     .then(message => {
-                        let payLoad = {
-                            userId: req.User,
-                            WsName: req.params.workspaceName
-                        }
-                        // run childprocess : run script
-                        RunWorkspace(payLoad)
-                        .then((message)=> {
-                            // 更新database
+                        // run jobUploader
+                        let {podName, userId, WsName, config} = payLoad
+                        UploadJobToCytus(podName, config.GpuNum, userId, WsName)
+                        .then((msg) => {
+                            console.log(msg);
                             doc.save()
-                            .then(Newdoc => {
-                                console.log('create workReceor success:');
-                                console.log(Newdoc);
-                            })
-                            .catch(err => {
-                                console.log(err)
-                            })
-                            // success save update database
-                            // response run message to client
-                            console.log(message)
-                            res.json({
-                                message: 'success run workspace! We will notify you when work is success or fail!',
-                                WsName: req.params.workspaceName
+                            .then(() => {
+                                res.json({
+                                    message: 'successful submit jub to Cytus!'
+                                })
                             })
                         })
-                        .catch(err => {
-                            console.log(err.toString())
+                        .catch((err) => {
+                            console.log(err)
                             res.status(500).json({
-                                message: 'failed to run workspace!',
-                                WsName: req.params.workspaceName
+                                message: 'server side error occurs, plz contact us!'
                             })
                         })
                         // async log GenerateYaml's message here
@@ -565,7 +553,26 @@ function createRouter(dependencies = {}) {
             else {
                 // 訪問userId的根目錄（WorkingSpace/repository）
                 console.log('targetPath: '+req.targetPath);
-                LS(req.params.userId, '/' +req.targetPath, (payLoad)=> {
+                LS(req.params.userId, req.targetPath, (payLoad)=> {
+                    res.json(payLoad)
+                })
+                
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
+    router.get('/:userId/management/api/loadWorkspaceList',veriftJWT(),function(req, res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                // 訪問userId的根目錄（WorkingSpace/repository）
+                LoadWSList(req.params.userId, (payLoad)=> {
                     res.json(payLoad)
                 })
                 
@@ -584,6 +591,7 @@ function createRouter(dependencies = {}) {
     // get root(repository/workingspaceList) of user
     router.post('/:userId/:path/upload',veriftJWT(), pathSolver(), upload.array('uploadFile'),function(req, res, next) {
         // query analysis, send defrriend response data to frontend to render
+        req.setTimeout(3*60*1000); // 3mins to upload
         LS(req.params.userId, '/'+req.targetPath, (payLoad) => {
             res.json(payLoad);
         })

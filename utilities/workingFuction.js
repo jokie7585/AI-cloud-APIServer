@@ -3,19 +3,50 @@ var fs = require('fs');
 var ph = require('path');
 var jsYaml = require('js-yaml')
 const fsPromise = fs.promises;
-var {spawnSync} = require('child_process')
+var {spawnSync, execFileSync} = require('child_process')
+
+
+function LoadWSList (userId, cb) {
+    let Path = ph.join(process.env.ROOTPATH, userId, 'Workspace')
+    fs.readdir(Path, {withFileTypes: true}, (err, files) =>{
+        if(!err) {
+            let payLoad = files.map(el => {
+                if(el.isDirectory()) {
+                    return({
+                        name: el.name,
+                        type: 'dir'
+                    })
+                }
+                else if(el.isFile()) {
+                    return({
+                        name: el.name,
+                        type: 'file'
+                    })
+                }
+                else{
+                    throw new Error('exception in Utility.workingFunction.LS');
+                }
+            })
+            
+            cb(payLoad);
+        }
+        else{
+            console.error(err);
+        }
+        
+    })
+}
 
 // 查詢根目錄內某user的目錄
-function LS(userDir, path='/' ,cb) {
+function LS(userID, path='/' ,cb) {
     let Path = '';
     if(process.env.ROOTPATH) {
-        Path = Path + process.env.ROOTPATH;
+        Path = ph.join(Path, process.env.ROOTPATH) 
     }
     // 若用戶端想訪問指定用戶的root會使用root當path,但實際上並沒有這個path
-    console.log('In LS() path is: ' + path);
-    path = path.replace('/root', '');
-
-    Path = Path + userDir + path;
+    path = ph.normalize(path)
+    Path = ph.join(Path, userID, path)
+    console.log('In LS() path is: ' + Path);
     
     fs.readdir(Path, {withFileTypes: true}, (err, files) =>{
         if(!err) {
@@ -48,11 +79,36 @@ function LS(userDir, path='/' ,cb) {
 
 async function CreateUserRootFolder(UserId) {
     let path = process.env.ROOTPATH || process.cwd()
-    path = path + '/' + UserId
+    path = ph.join(path, UserId)
+    let Monitor = ph.join(path,'Monitor')
 
     await fsPromise.mkdir(path)
     .then(()=> {
         console.log(path + 'is created')
+    })
+    .catch(err => {
+        if(err) throw err;
+    })
+
+    await fsPromise.mkdir(ph.join(path, 'Workspace'))
+    .then(()=> {
+        console.log(`${UserId}'s workspace root created!`)
+    })
+    .catch(err => {
+        if(err) throw err;
+    })
+
+    await fsPromise.mkdir(Monitor)
+    .then(()=> {
+        console.log(`${UserId}'s Monitor Folder created!`)
+    })
+    .catch(err => {
+        if(err) throw err;
+    })
+
+    await fsPromise.mkdir(ph.join(Monitor,'logs'))
+    .then(()=> {
+        console.log(`${UserId}'s Monitor/logs Folder created!`)
     })
     .catch(err => {
         if(err) throw err;
@@ -81,7 +137,8 @@ async function RunWorkspace(payload) {
 
 async function GenerateYaml(payLoad) {
     let {userId, config, scheduleList, WsName,credential,logPath,podName} = payLoad;
-    let workspaceRoot = ph.join(process.env.ROOTPATH,userId,WsName).toString();
+    let workspaceRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName).toString();
+    let AppRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName, 'AppRoot').toString();
     console.log('volumes path :')
     console.log(workspaceRoot)
     // normlized path in container
@@ -89,7 +146,7 @@ async function GenerateYaml(payLoad) {
     let logPathInContainer = logPath.match(getLogPathInContainer)[0];
     // prepare config
     let Podname = podName; // assign podName
-    let {tensorflowVersion} = config;
+    let {tensorflowVersion, GpuNum} = config;
     // yaml Template
     let yaml = {
         apiVersion: "v1",
@@ -137,14 +194,19 @@ async function GenerateYaml(payLoad) {
                             mountPath: "/tmp/",
                             name: "work-space"
                         }
-                    ]
+                    ],
+                    resources: {
+                        limits: {
+                            'nvidia.com/gpu': GpuNum
+                        }
+                    }
                 }
             ],
             volumes: [
                 {
                     name: "work-space",
                     hostPath: {
-                        path: workspaceRoot, // workspaceRoot here
+                        path: AppRoot, // workspaceRoot here
                         type: "Directory"
                     }
                 }
@@ -198,22 +260,19 @@ function createBashArgs(ScheduleList) {
 async function CreateWorkspace(payload) {
     let {WSName, UserId} = payload;
     if(WSName === '') throw 'Workspace name cannot be empty!'
-    let path = ph.join(process.env.ROOTPATH, UserId, WSName);
+    let path = ph.join(process.env.ROOTPATH, UserId, 'Workspace', WSName);
     await fsPromise.mkdir(path).catch(err=> {
         console.log(err)
         throw 'workspace is already Exist! plz use another name!'
     })
+    // 產生 AppRoot
+    await fsPromise.mkdir(ph.join(path, 'AppRoot'))
     // 產生secret dir
     path = ph.join(path, '.secrete')
-    let logPath = ph.join(path, 'logs')
     await fsPromise.mkdir(path)
-    await fsPromise.mkdir(logPath)
-    // 產生腳本
-    await CreateRunWorkspaceScript(payload)
-    .catch(err=> {
-        fsPromise.unlink(path);
-        throw 'serverside Error occur! plz contact us'
-    })
+    await fsPromise.mkdir(ph.join(path, 'logs'))
+    await fsPromise.mkdir(ph.join(path, 'monitor'))
+    
     return WSName
 }
 
@@ -239,27 +298,17 @@ var deleteFolderRecursive = function(path) {
       }
   };
 
-async function CreateRunWorkspaceScript(payLoad) {
-    let {WSName, UserId} = payLoad;
-    let targetPath = ph.join(process.env.ROOTPATH, UserId, WSName, '.secrete');
-    let yamlPath = ph.join(targetPath,  'podConfig.yaml');
-    let scriptPath = ph.join(targetPath,  'script_preparePod.sh');
-    // 生成script
-    let script = `kubectl create -f ${yamlPath}`
-    // 生成收集log行數的
-    // 寫入script
-    let fileHandler = await fsPromise.open(scriptPath, 'w+');
-    console.log('start write script')
-    await fileHandler.writeFile(script)
-    console.log('end write script')
-    await fileHandler.close();
-    return script;
-}
+  async function UploadJobToCytus(podname,gpunumber, userId, Wsname) {
+    let yamlpath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/podConfig.yaml')
+    let scriptPath = ph.join(process.cwd(), 'utilities/CytusCTL/jobUploader.js')
+    let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
+    return stdout
+  }
 
 
 
 
 module.exports = {
-    LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml
+    LoadWSList, LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus
 }
 

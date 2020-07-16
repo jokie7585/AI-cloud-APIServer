@@ -10,7 +10,7 @@ require('dotenv').config();
 
 // configure cors
 const corsOption = {
-  "origin": ["http://localhost:3000", process.env.FrontendIP, "http://192.168.43.219:3008"],
+  "origin": ["http://localhost:3000", "http://192.168.43.90:4200", process.env.FrontendIP, "http://192.168.43.219:3008"],
   "credentials": true,
   "exposedHeaders":["Content-Disposition","X-AICLOUD-ENDLOG"]
 }

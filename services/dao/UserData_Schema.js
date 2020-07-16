@@ -1,5 +1,6 @@
 var mongoose = require('mongoose');
 var ph = require('path');
+var cytus = require('../../utilities/CytusCTL/CytusPrototcol')
 // subDOC
 
 // schema define
@@ -206,9 +207,9 @@ UserData_Schema.methods.CreateWorkRecord = function({WsName}) {
     let timestamp = new Date();
     let podName = `${this.account}.${WsName}-${timestamp.getTime()}`;
     let newRecord = {
-        logPath: ph.join(process.env.ROOTPATH, this.account, WsName, '.secrete/logs', podName+'.txt'),
+        logPath: ph.join(process.env.ROOTPATH, this.account, 'Workspace', WsName, '.secrete/logs', podName+'.txt'),
         podName: podName.toLocaleLowerCase(),
-        status: 'pending',
+        status: cytus.CytusAppStatus.WAIT,
         CreateDate: timestamp
     }
     // 加入記錄到指定worksepce的workRecord中
@@ -257,7 +258,7 @@ UserData_Schema.methods.Set_LastPod_Running = function({WsName}) {
     for(element of curWorkspace.workRecord) {
         if(element.podName === curWorkspace.LastPodName) {
             // 取得選定的workspace
-            element.status = 'running';
+            element.status = cytus.CytusAppStatus.RUNNING;
             return element;
         }
     }
@@ -281,7 +282,7 @@ UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
     for(element of curWorkspace.workRecord) {
         if(element.podName === curWorkspace.LastPodName) {
             // 取得選定的workspace
-            element.status = 'completed';
+            element.status = cytus.CytusAppStatus.COMPLETE;
             return element;
         }
     }

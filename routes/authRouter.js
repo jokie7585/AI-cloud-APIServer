@@ -24,7 +24,7 @@ function createRouter(dependencies) {
                 res.cookie('token', token, {maxAge: EXPIRES_IN, httpOnly:true});
                 res.json({
                     token,
-                    message:'Success response!'
+                    message:'Success logings, 回家拉幹!'
                 });
             })
             .catch(err=> {
@@ -38,6 +38,8 @@ function createRouter(dependencies) {
     // 註冊API,若註冊失敗則回傳指定訊息提供前端渲染
     router.post('/signUp', function (req, res, next) {
         const data = req.body;
+        console.log('signUp Data :')
+        console.log(data);
         userSingUp(data)
         .then(doc => {
             console.log('success run sighUp process!')
