@@ -591,7 +591,7 @@ function createRouter(dependencies = {}) {
     // get root(repository/workingspaceList) of user
     router.post('/:userId/:path/upload',veriftJWT(), pathSolver(), upload.array('uploadFile'),function(req, res, next) {
         // query analysis, send defrriend response data to frontend to render
-        req.setTimeout(3*60*1000); // 3mins to upload
+        req.setTimeout(5*60*60*1000); // 5hours to upload
         LS(req.params.userId, '/'+req.targetPath, (payLoad) => {
             res.json(payLoad);
         })
