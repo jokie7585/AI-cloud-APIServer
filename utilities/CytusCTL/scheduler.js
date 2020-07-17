@@ -9,6 +9,7 @@ var context = require('rabbit.js')
 let root = args.root || args.r || process.cwd()
 
 let config;
+let scheduler;
 
 
 class ScedulList {
@@ -23,9 +24,27 @@ class ScedulList {
                 maxgpu = element.gpuNumber;
             }
         });
-        for( i = 0; i <= maxgpu; i++) {
+        for( let i = 0; i <= maxgpu; i++) {
             this.list.push(new JobQueue())
         }
+
+        let time = new Date();
+        console.log(time.toUTCString() + ` Init scheduleList, now \x1b[32m${nodeAvailible.length}\x1b[0m node are availible.`)
+    }
+
+    insert(Job){
+        let{gpuNumber} = Job;
+        this.list[gpuNumber].insert(Job)
+        
+    }
+
+    List(){
+        let msg = '';
+        msg = msg + 'requsetGPU\tJobList\n';
+        this.list.forEach((el, index) => {
+            msg = msg + `${index}\t${el.toString()}\n`
+        })
+        console.log(msg )
     }
 }
 
@@ -34,7 +53,17 @@ class JobQueue {
         this.queue = []
     }
 
+    insert(Job) {
+        this.queue.push(Job)
+    }
 
+    toString(){
+        let list = ''
+        this.queue.forEach(el => {
+            list = list + `${el.podname} `
+        })
+        return list
+    }
 }
 
 function initMQ() {
@@ -52,10 +81,13 @@ function initMQ() {
         if(event === CytusEvent.JOB_UPLOAD) {
           let {podname} = data;
           console.log(time.toUTCString() + ` \x1b[32m${podname}\x1b[0m just push a Job.`); 
+          scheduler.insert(data)
+          scheduler.List()
           pub.write(JSON.stringify({event: CytusEvent.JOB_COMFIRM,podname: podname}), 'utf8');
         }
         else if (event === CytusEvent.SCHDULER_LISTALL) {
-
+            console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :Cytus deamon says: ListAll')
+            scheduler.List()
         }
         else {
           console.log(note)
@@ -85,8 +117,9 @@ async function initWorkspace() {
         fs.mkdir(ph.join(root, 'CytusScheduler', 'data'))
         fs.mkdir(ph.join(root, 'CytusScheduler', 'logs'))
         fs.mkdir(ph.join(root, 'CytusScheduler', 'Monitor'))
-        initConfig()
+        initVertualConfig()
         .then(() => {
+          scheduler = new ScedulList(config);
           let time = new Date();
           console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace is create, sheduler is running.')
         })
@@ -99,6 +132,7 @@ async function initWorkspace() {
 
     })
     .catch(err => {
+        ReadConfig();
         let time = new Date();
         console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace is checked, sheduler is running.')
     })
@@ -119,9 +153,24 @@ async function initConfig() {
     let fileHandler = await fs.open(config.configPath, 'w+');
     await fileHandler.writeFile(JSON.stringify(config));
     await fileHandler.close();
-
     let time = new Date();
     console.log(time.toUTCString() + ' Init config, now \x1b[32m0\x1b[0m node are availible. Plz add node.')
+}
+
+async function initVertualConfig() {
+    /**
+     * nodeAvailible = [{nodename, Joblist, gpuNumber}, ....] // at nodeAvailible[n] means has n Gpu availibel
+     * nextJob       = {podname, gpuNumber, targetNode}
+     */
+    config = {
+        configPath: ph.join(root, 'CytusScheduler', 'Monitor', 'config.conf'),
+        nodeAvailible: [{nodename:'test', Joblist:[], gpuNumber:1}, {nodename:'test2', Joblist:[], gpuNumber:2}, {nodename:'test3', Joblist:[], gpuNumber:3}, {nodename:'test4', Joblist:[], gpuNumber:4},{nodename:'test5', Joblist:[], gpuNumber:5}, {nodename:'test6', Joblist:[], gpuNumber:6}, {nodename:'test7', Joblist:[], gpuNumber:7} , {nodename:'test8', Joblist:[], gpuNumber:8}],
+        nextJob:[],
+    }
+
+    let fileHandler = await fs.open(config.configPath, 'w+');
+    await fileHandler.writeFile(JSON.stringify(config));
+    await fileHandler.close();
 }
 
 async function WriteConfig() {
@@ -140,6 +189,7 @@ async function ReadConfig() {
     await fileHandler.readFile({encoding:'utf-8'})
     .then((data) => {
         config = JSON.parse(data);
+        scheduler = new ScedulList(config);
     })
     .catch(err => {
         console.log(err)
