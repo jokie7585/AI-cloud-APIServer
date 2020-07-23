@@ -2,6 +2,8 @@
 const {CytusEvent} = require('./CytusPrototcol')
 const ph = require('path')
 const fs = require('fs').promises
+const syncFs = require('fs')
+const {spawnSync} = require('child_process')
 const yargs = require('yargs')
 const args = yargs.argv
 var context = require('rabbit.js')
@@ -111,32 +113,65 @@ function initMQ() {
 }
  
 async function initWorkspace() {
-    // 初始化獲確認workspace已建立
+    // 初始化獲確認workspace已建立或初始化workspace
+    // 測試目前目錄為unixlike或windows結構,並初始化目錄
+    let root;
+    let firsttime = true;
+    await fs.access('/usr/local/CytusScheduler')
+    .then( () => {
+        let time = new Date();
+        console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace exist, start init CytusScheduler.')
+        root = '/usr/local/CytusScheduler';
+        firsttime = false;
+    })
+    .catch((err) => {
+        let time = new Date();
+        console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace not found, start create workspace for CytusScheduler.')
+        root = '';
+    })
+    if(firsttime) await initFirstTime();
+
+    // 讀入configfile以初始化設定
+    
+
+
+
+
+}
+
+async function initFirstTime() {
+    // 測試目前目錄為unixlike或windows結構
+    let root;
+
+    await fs.access('/usr/local')
+    .then( () => {
+        let time = new Date();
+        console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :start init workspace under /usr/local')
+        root = '/usr/local';
+    })
+    .catch((err) => {
+        let time = new Date();
+        console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :start init workspace under root of your machine')
+        root = '';
+        
+    })
+
+
     await fs.mkdir(ph.join(root, 'CytusScheduler'))
     .then(() => {
-        fs.mkdir(ph.join(root, 'CytusScheduler', 'data'))
-        fs.mkdir(ph.join(root, 'CytusScheduler', 'logs'))
-        fs.mkdir(ph.join(root, 'CytusScheduler', 'Monitor'))
-        initVertualConfig()
-        .then(() => {
-          scheduler = new ScedulList(config);
-          let time = new Date();
-          console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace is create, sheduler is running.')
-        })
-        .catch((err )=> {
-          console.log(err)
-          require('./utitlity/deleteFolder.js')(ph.join(root, 'CytusScheduler'))
-          let time = new Date();
-          console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :error occure when init workspace, undo init.')
-        })
-
+        syncFs.mkdirSync(ph.join(root, 'CytusScheduler', 'data'))
+        syncFs.mkdirSync(ph.join(root, 'CytusScheduler', 'logs'))
+        syncFs.mkdirSync(ph.join(root, 'CytusScheduler', 'Monitor'))
     })
     .catch(err => {
-        ReadConfig();
         let time = new Date();
-        console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace is checked, sheduler is running.')
+        if(err.code === 'EACCES') {
+            console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :No permission to create workspace under path: ' + root)
+        }
+        else {
+            console.log(time.toUTCString() + ' \x1b[32mCytus\x1b[0m :workspace is checked exist.')
+        }
     })
-
 }
 
 async function initConfig() {
