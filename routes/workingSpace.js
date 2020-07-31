@@ -5,7 +5,8 @@ const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
 const {LS,LoadWSList , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
-const {AppError, errorType} = require('../utilities/AppError')
+const {AppError, errorType} = require('../utilities/AppError');
+const { json } = require('express');
 
 
 function createRouter(dependencies = {}) {
@@ -122,45 +123,6 @@ function createRouter(dependencies = {}) {
                 })
                 
                 console.log('async run start')
-            }
-        }
-        else {
-            throw new Error('no jwt token, plz login to use your workingSpace')
-        }
-    })
-
-    router.post('/:userId/management/api/SetWorkspaceConfig/:workspaceName', veriftJWT(), function( req,res, next) {
-        if(req.User == req.params.userId) {
-            if(req.User === 'Guest') {
-                // 載入Public頁面/資料
-                throw new Error('Guest can not use fileSystem.LS');
-            }
-            else {
-                MCS.getdocInstance({account:req.User})
-                .then(doc=> {
-                    // process here
-                    console.log('process workspaceconfif:')
-                    let payload = {
-                        WsName: req.params.workspaceName,
-                        payload: req.body
-                    }
-                    doc.setConfig(payload);
-                    doc.save()
-                    .then(instance=>{
-                        console.log('doc save Success:')
-                        console.log(instance)
-                        res.json({
-                            message:'success set config!'
-                        })
-                    })
-                    .catch(err=> {
-                        console.log('doc save failed')
-                        console.log(instance)
-                        res.status(500).json({
-                            message:'failed to set config!Plz contact us to fixed that problems!'
-                        })
-                    })
-                })
             }
         }
         else {
@@ -589,12 +551,13 @@ function createRouter(dependencies = {}) {
     })
 
     // get root(repository/workingspaceList) of user
-    router.post('/:userId/:path/upload',veriftJWT(), pathSolver(), upload.array('uploadFile'),function(req, res, next) {
-        // query analysis, send defrriend response data to frontend to render
-        req.setTimeout(5*60*60*1000); // 5hours to upload
-        LS(req.params.userId, '/'+req.targetPath, (payLoad) => {
-            res.json(payLoad);
+    router.post('/:userId/:path/upload',veriftJWT(), pathSolver(), upload.array('uploadfiles'), function(req, res, next) {
+        // process upload request
+        // 簽發Upload專用的token(包含每個檔案的相對路徑與此次上傳的根路徑)
+        LS(req.params.userId, req.targetPath, (data)=> {
+            res.json(data)
         })
+        
     })
 
     // process downoad

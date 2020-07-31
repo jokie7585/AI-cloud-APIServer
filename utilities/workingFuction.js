@@ -136,7 +136,7 @@ async function RunWorkspace(payload) {
 // yaml creater fuction set
 
 async function GenerateYaml(payLoad) {
-    let {userId, config, scheduleList, WsName,credential,logPath,podName} = payLoad;
+    let {userId, config,commandList, scheduleList, WsName,credential,logPath,podName} = payLoad;
     let workspaceRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName).toString();
     let AppRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName, 'AppRoot').toString();
     console.log('volumes path :')
@@ -188,7 +188,7 @@ async function GenerateYaml(payLoad) {
                     ],
                     imagePullPolicy: "IfNotPresent",
                     command: ["/bin/sh"],
-                    args: createBashArgs(scheduleList), // generat bash args
+                    args: createBashArgs(commandList), // generat bash args
                     volumeMounts: [
                         {
                             mountPath: "/tmp/",
@@ -236,14 +236,9 @@ function createBashArgs(ScheduleList) {
     // 初始化logFile
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
     
-    for (exe of ScheduleList) {
-        let {ext} = ph.parse(exe);
-        if(ext === '.py') {
-            shellScript = shellScript.concat('python ' + exe + ' >> $LogPath 2>&1;');
-        }
-        else if(ext === '.sh') {
-            shellScript = shellScript.concat('sh ' + exe + ' >> $LogPath 2>&1;');
-        }
+    for (command of ScheduleList) {
+        shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
+        
     }
     // 發出 curl 請求,通知server完成工作
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setFinish/$WsName ;`);
@@ -300,9 +295,10 @@ var deleteFolderRecursive = function(path) {
 
   async function UploadJobToCytus(podname,gpunumber, userId, Wsname) {
     let yamlpath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/podConfig.yaml')
-    let scriptPath = ph.join(process.cwd(), 'utilities/CytusCTL/jobUploader.js')
-    let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
-    return stdout
+    // let scriptPath = ph.join(process.cwd(), 'utilities/CytusCTL/jobUploader.js')
+    // let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
+    // return stdout
+    return spawnSync('kubectl', ['create', '-f', yamlpath]);
   }
 
 
