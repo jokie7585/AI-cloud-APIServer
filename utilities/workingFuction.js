@@ -241,6 +241,7 @@ function createBashArgs(ScheduleList, Wsname) {
     let args = ["-c"];
     let shellScript = '';
     // 編輯指令
+    shellScript = shellScript.concat('su -;');
     // 切換至容器工作區
     shellScript = shellScript.concat('cd'.concat(' /', Wsname ,';'));
     // 殺出request告知server此pod成功啟動並更新資料庫
@@ -249,7 +250,7 @@ function createBashArgs(ScheduleList, Wsname) {
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
     
     for (command of ScheduleList) {
-        shellScript = shellScript.concat('sudo ' + command + ' >> $LogPath 2>&1;');
+        shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
         
     }
     // 發出 curl 請求,通知server完成工作
