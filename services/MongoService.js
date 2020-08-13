@@ -37,7 +37,7 @@ async function singUp({account,password}) {
         return await newData.save();
     }
     else{
-        return Promise.reject('This account is already exist.')
+        return Promise.reject('This username is already exist.')
     }
 }
 

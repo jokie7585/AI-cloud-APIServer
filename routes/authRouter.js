@@ -24,7 +24,7 @@ function createRouter(dependencies) {
                 res.cookie('token', token, {maxAge: EXPIRES_IN, httpOnly:true});
                 res.json({
                     token,
-                    message:'Success logings, 回家拉幹!'
+                    message:'Success logings'
                 });
             })
             .catch(err=> {
@@ -60,6 +60,10 @@ function createRouter(dependencies) {
 // workerFunction
 // --------------------------------------------
 async function userSingUp(data) {
+    let {account,password}= data;
+    if(account ==='' || password === '') {
+        return Promise.reject('username and password cannot be white space!');
+    }
     let docInstance = await MCS.singUp(data)
     .then( (doc) => {
         // console.log(doc)

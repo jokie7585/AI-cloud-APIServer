@@ -5,6 +5,7 @@ const SECRET = 'YOUR_JWT_SECRET';
 
 async function verifyJWT(jwt) {
     if(!jwt) {
+        console.log('no session!')
         return Promise.reject(new Error('No JWT'));
     }
     const decoded = jsonwebtoken.verify(jwt, SECRET);

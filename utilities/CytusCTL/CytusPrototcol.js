@@ -15,7 +15,7 @@ const CytusEvent = {
 const CytusAppStatus = {
     WAIT : 'waiting',
     PENDING : 'pending',
-    RUNNING : 'runnung',
+    RUNNING : 'running',
     COMPLETE : 'completed'
 
 }

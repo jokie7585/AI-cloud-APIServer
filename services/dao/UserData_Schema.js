@@ -11,6 +11,11 @@ var workspaceSet_Schema = new mongoose.Schema({
         tensorflowVersion: String,
         GpuNum:Number,
     },
+    notification: [{
+        type: String,
+        title: String,
+        detail:String
+    }],
     scheduleList:[String],
     commandList: [],
     workRecord : [
@@ -18,7 +23,7 @@ var workspaceSet_Schema = new mongoose.Schema({
             logPath:String,
             podName:String,
             status:String,
-            CreateDate:Date
+            CreateDate:Date,
         }
     ]
 });
@@ -215,7 +220,7 @@ UserData_Schema.methods.CreateWorkRecord = function({WsName}) {
     // 加入記錄到指定worksepce的workRecord中
     curWorkspace.workRecord.push(newRecord);
     // 更新 LastPodName
-    curWorkspace.LastPodName=podName;
+    curWorkspace.LastPodName=newRecord.podName;
     // 回傳newRecord物件
     return newRecord;
 };

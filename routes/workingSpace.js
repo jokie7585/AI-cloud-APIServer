@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {LS,LoadWSList , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
+const {LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
 const {AppError, errorType} = require('../utilities/AppError');
 const { json } = require('express');
@@ -80,6 +80,7 @@ function createRouter(dependencies = {}) {
     router.post('/:userId/management/api/deleteWorkspace', veriftJWT(), function( req,res, next) {
         if(req.User == req.params.userId) {
             if(req.User === 'Guest') {
+                console.log({apiQuery:req.User, JWT:req.params.userId})
                 // 載入Public頁面/資料
                 throw new Error('Guest can not use fileSystem.LS');
             }
@@ -348,7 +349,8 @@ function createRouter(dependencies = {}) {
                         let {podName, userId, WsName, config} = payLoad
                         UploadJobToCytus(podName, config.GpuNum, userId, WsName)
                         .then((msg) => {
-                            console.log(msg);
+                            console.log(msg.stdout);
+                            console.log(msg.stderr.toString());
                             doc.save()
                             .then(() => {
                                 res.json({
@@ -357,7 +359,7 @@ function createRouter(dependencies = {}) {
                             })
                         })
                         .catch((err) => {
-                            console.log(err)
+                            console.log(err.toString())
                             res.status(500).json({
                                 message: 'server side error occurs, plz contact us!'
                             })
@@ -366,7 +368,7 @@ function createRouter(dependencies = {}) {
                         console.log(message);
                     })
                     .catch(err => {
-                        console.log(err);
+                        console.log(err.toString());
                         res.status(500).json({
                             message: 'server side error occurs, plz contact us!'
                         })
@@ -374,7 +376,7 @@ function createRouter(dependencies = {}) {
                 
                 })
                 .catch(err => {
-                    console.log(err);
+                    console.log(err.toString());
                     res.status(500).json({
                         message: 'server side error occurs, plz contact us!'
                     })
@@ -405,21 +407,38 @@ function createRouter(dependencies = {}) {
                             res.set({
                                 'X-AICLOUD-ENDLOG' : true
                             })
-                            res.download(logPath, (err) => {
-                                if(err) console.log(err);
+                            getFileContentAsString(logPath, (data) => {
+                                res.send({logs: data})
+                            })
+                            .catch((err) => {
+                                console.log(err);
                             })
                         }
                         else if (status === 'running') {
                             res.set({
                                 'X-AICLOUD-ENDLOG' : false
                             })
-                            res.download(logPath, (err) => {
-                                if(err) console.log(err);
+                            getFileContentAsString(logPath, (data) => {
+                                res.send({logs: data})
+                            })
+                            .catch((err) => {
+                                console.log(err);
                             })
                         }
                         else if (status === 'pending') {
+                            res.set({
+                                'X-AICLOUD-ENDLOG' : true
+                            })
                             res.status(500).json({
-                                message: "this workspace is waiting to run, there are no logs to show!\nwe will notify you when your job start!"
+                                message: "this workspace is in cetus but waiting to prepare dependency , there are no logs to show!\nwe will notify you when your job start!"
+                            })
+                        }
+                        else if (status === 'waiting') {
+                            res.set({
+                                'X-AICLOUD-ENDLOG' : true
+                            })
+                            res.status(500).json({
+                                message: "this workspace is in cetus scheduler(there are no resources for your app), there are no logs to show!\nwe will notify you when your job start!"
                             })
                         }
                         

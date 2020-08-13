@@ -139,11 +139,12 @@ async function GenerateYaml(payLoad) {
     let {userId, config,commandList, scheduleList, WsName,credential,logPath,podName} = payLoad;
     let workspaceRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName).toString();
     let AppRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName, 'AppRoot').toString();
+    let AppLogRoot = ph.join(workspaceRoot, '.secrete/logs')
     console.log('volumes path :')
     console.log(workspaceRoot)
     // normlized path in container
-    var getLogPathInContainer = new RegExp(/\.secrete.*/);
-    let logPathInContainer = logPath.match(getLogPathInContainer)[0];
+    var getLogPathInContainer = new RegExp(/\/\.secrete(.*)/);
+    let logPathInContainer = logPath.match(getLogPathInContainer)[1];
     // prepare config
     let Podname = podName; // assign podName
     let {tensorflowVersion, GpuNum} = config;
@@ -188,11 +189,15 @@ async function GenerateYaml(payLoad) {
                     ],
                     imagePullPolicy: "IfNotPresent",
                     command: ["/bin/sh"],
-                    args: createBashArgs(commandList), // generat bash args
+                    args: createBashArgs(commandList, WsName), // generat bash args
                     volumeMounts: [
                         {
-                            mountPath: "/tmp/",
+                            mountPath: '/tmp/',
                             name: "work-space"
+                        },
+                        {
+                            mountPath: "/logs/",
+                            name: "log-root"
                         }
                     ],
                     resources: {
@@ -209,7 +214,14 @@ async function GenerateYaml(payLoad) {
                         path: AppRoot, // workspaceRoot here
                         type: "Directory"
                     }
-                }
+                },
+                {
+                    name: "log-root",
+                    hostPath: {
+                        path: AppLogRoot, // workspaceRoot here
+                        type: "Directory"
+                    }
+                },
             ]
         }
     }
@@ -225,12 +237,12 @@ async function GenerateYaml(payLoad) {
     return 'success create - podConfig.yaml';
 }
 
-function createBashArgs(ScheduleList) {
+function createBashArgs(ScheduleList, Wsname) {
     let args = ["-c"];
     let shellScript = '';
     // 編輯指令
     // 切換至容器工作區
-    shellScript = shellScript.concat('cd /tmp;');
+    shellScript = shellScript.concat('cd'.concat(' /tmp;'));
     // 殺出request告知server此pod成功啟動並更新資料庫
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
     // 初始化logFile
@@ -273,7 +285,7 @@ async function CreateWorkspace(payload) {
 
 async function DeleteWorkspace(payload) {
     let {WSName, UserId} = payload;
-    let path = ph.join(process.env.ROOTPATH, UserId, WSName);
+    let path = ph.join(process.env.ROOTPATH, UserId, 'Workspace', WSName);
     deleteFolderRecursive(path);
     console.log('success recursive delete path: ' + path);
     return WSName;
@@ -301,10 +313,17 @@ var deleteFolderRecursive = function(path) {
     return spawnSync('kubectl', ['create', '-f', yamlpath]);
   }
 
+  async function getFileContentAsString(logPath, cb){
+    let fr = await fsPromise.open(logPath, 'r');
+    let content = await fr.readFile({encoding: 'utf-8'});
+    fr.close();
+    cb(content);
+  }
+
 
 
 
 module.exports = {
-    LoadWSList, LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus
+    LoadWSList, LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
 }
 
