@@ -192,7 +192,7 @@ async function GenerateYaml(payLoad) {
                     args: createBashArgs(commandList, WsName), // generat bash args
                     volumeMounts: [
                         {
-                            mountPath: '/tmp/',
+                            mountPath: '/'.concat(WsName, '/'),
                             name: "work-space"
                         },
                         {
@@ -242,7 +242,7 @@ function createBashArgs(ScheduleList, Wsname) {
     let shellScript = '';
     // 編輯指令
     // 切換至容器工作區
-    shellScript = shellScript.concat('cd'.concat(' /tmp;'));
+    shellScript = shellScript.concat('cd'.concat(' /', Wsname ,';'));
     // 殺出request告知server此pod成功啟動並更新資料庫
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
     // 初始化logFile
