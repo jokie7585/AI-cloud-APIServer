@@ -249,7 +249,7 @@ function createBashArgs(ScheduleList, Wsname) {
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
     
     for (command of ScheduleList) {
-        shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
+        shellScript = shellScript.concat('sudo ' + command + ' >> $LogPath 2>&1;');
         
     }
     // 發出 curl 請求,通知server完成工作
