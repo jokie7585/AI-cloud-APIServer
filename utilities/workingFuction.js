@@ -241,7 +241,7 @@ function createBashArgs(ScheduleList, Wsname) {
     let args = ["-c"];
     let shellScript = '';
     // 編輯指令
-    shellScript = shellScript.concat('su - > $LogPath;;');
+    shellScript = shellScript.concat('su - > $LogPath;');
     // 切換至容器工作區
     shellScript = shellScript.concat('ls / >> $LogPath;');
     shellScript = shellScript.concat('cd'.concat(' /', Wsname ,';'));
