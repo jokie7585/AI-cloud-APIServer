@@ -192,7 +192,7 @@ async function GenerateYaml(payLoad) {
                     args: createBashArgs(commandList, WsName), // generat bash args
                     volumeMounts: [
                         {
-                            mountPath: '/tmp',
+                            mountPath: '/tmp/',
                             name: "work-space"
                         },
                         {
