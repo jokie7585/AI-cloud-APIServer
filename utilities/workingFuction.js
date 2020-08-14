@@ -244,7 +244,7 @@ function createBashArgs(ScheduleList, Wsname) {
     shellScript = shellScript.concat(`chmod /${Wsname} 777;`);
     shellScript = shellScript.concat('su - > $LogPath;');
     // 切換至容器工作區
-    shellScript = shellScript.concat('ls -l / >> $LogPath;');
+    shellScript = shellScript.concat('ls -l >> $LogPath;');
     shellScript = shellScript.concat('cd'.concat(' /', Wsname ,';'));
     // 殺出request告知server此pod成功啟動並更新資料庫
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
