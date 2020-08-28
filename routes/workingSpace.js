@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
+const {loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
 const {AppError, errorType} = require('../utilities/AppError');
 const { json } = require('express');
@@ -130,6 +130,75 @@ function createRouter(dependencies = {}) {
             throw new Error('no jwt token, plz login to use your workingSpace')
         }
     })
+
+
+    router.get('/:userId/management/api/resetWorkspaceRoot/:Wsname', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                console.log({apiQuery:req.User, JWT:req.params.userId})
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                let wsname = req.params.Wsname;
+                resetWorkspaceRoot(req.User, wsname)
+                .then(() => {
+                    res.json({
+                        message: 'success delete!'
+                    })
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
+
+    router.get('/:userId/management/api/cachWorkspaceRoot/:Wsname', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                console.log({apiQuery:req.User, JWT:req.params.userId})
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                let wsname = req.params.Wsname;
+                cachWorkspace(req.User, wsname)
+                .then(() => {
+                    res.json({
+                        message: 'success delete!'
+                    })
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
+    router.get('/:userId/management/api/loadCachasWorkspaceRoot/:Wsname', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                console.log({apiQuery:req.User, JWT:req.params.userId})
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                let wsname = req.params.Wsname;
+                loadWorkspaceCach(req.User, wsname, (payload) => {
+                    res.json(payload)
+                })
+                .catch(err => {
+                    console.log(err)
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
 
      router.post('/:userId/management/api/SetWorkspaceConfig/:workspaceName', veriftJWT(), function( req,res, next) {
         if(req.User == req.params.userId) {

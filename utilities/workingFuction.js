@@ -3,7 +3,8 @@ var fs = require('fs');
 var ph = require('path');
 var jsYaml = require('js-yaml')
 const fsPromise = fs.promises;
-var {spawnSync, execFileSync} = require('child_process')
+var {spawnSync, execFileSync} = require('child_process');
+const { identity } = require('lodash');
 
 
 function LoadWSList (userId, cb) {
@@ -192,7 +193,7 @@ async function GenerateYaml(payLoad) {
                     args: createBashArgs(commandList, WsName), // generat bash args
                     volumeMounts: [
                         {
-                            mountPath: '/tmp/',
+                            mountPath: '/mnt/',
                             name: "work-space"
                         },
                         {
@@ -242,14 +243,15 @@ function createBashArgs(ScheduleList, Wsname) {
     let shellScript = '';
     // 編輯指令
     // 切換至容器工作區
-    shellScript = shellScript.concat('cd /tmp;');
+    shellScript = shellScript.concat('cd /mnt;');
     // 殺出request告知server此pod成功啟動並更新資料庫
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
     // 初始化logFile
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
-    
     for (command of ScheduleList) {
-        shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
+        if(command[0] != '#') {
+            shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
+        }
         
     }
     // 發出 curl 請求,通知server完成工作
@@ -257,7 +259,7 @@ function createBashArgs(ScheduleList, Wsname) {
     // 提示使用者是否執行完畢
     shellScript = shellScript.concat('echo "\nConsole diconnected!..." >> $LogPath;');
     // 結束shell
-    shellScript = shellScript.concat('done');
+    // shellScript = shellScript.concat('done');
     args.push(shellScript);
     console.log('finish args set: ')
     console.log(args);
@@ -279,6 +281,7 @@ async function CreateWorkspace(payload) {
     await fsPromise.mkdir(path)
     await fsPromise.mkdir(ph.join(path, 'logs'))
     await fsPromise.mkdir(ph.join(path, 'monitor'))
+    // await fsPromise.mkdir(ph.join(path, 'cach'))
     
     return WSName
 }
@@ -291,7 +294,7 @@ async function DeleteWorkspace(payload) {
     return WSName;
 }
 
-var deleteFolderRecursive = function(path) {
+var deleteFolderRecursive = (path) => {
     if( fs.existsSync(path) ) {
         fs.readdirSync(path).forEach(function(file) {
           var curPath = path + "/" + file;
@@ -302,7 +305,7 @@ var deleteFolderRecursive = function(path) {
             }
         });
         fs.rmdirSync(path);
-      }
+    }
   };
 
   async function UploadJobToCytus(podname,gpunumber, userId, Wsname) {
@@ -320,10 +323,73 @@ var deleteFolderRecursive = function(path) {
     cb(content);
   }
 
+  async function cachWorkspace(userId, Wsname){
+    let cachPath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/cach');
+    let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+    // clean old cach
+    deleteFolderRecursive(cachPath);
+    let out  = fs.mkdirSync(cachPath)
+    console.log(out)
+    // cach new data
+    let stdout = spawnSync('cp', ['-a', source+'/.', cachPath]);
+    console.log(stdout)
+  }
+
+  async function loadWorkspaceCach(userId, Wsname, cb){
+    let commandString = 'cp';
+    let cachPath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/cach');
+    let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+    if(!fs.existsSync(cachPath)) {
+        throw new Error('no cach exist! you might Never run workspace, or cach is just deleted!')
+    }
+    else{
+        // clean old AppRoot
+        deleteFolderRecursive(source);
+        let out  = fs.mkdirSync(source)
+        // cach new data
+        let stdout = spawnSync('cp', ['-a', cachPath+'/.', source]);
+        fs.readdir(source, {withFileTypes: true}, (err, files) =>{
+            if(!err) {
+                let payLoad = files.map(el => {
+                    if(el.isDirectory()) {
+                        return({
+                            name: el.name,
+                            type: 'dir'
+                        })
+                    }
+                    else if(el.isFile()) {
+                        return({
+                            name: el.name,
+                            type: 'file'
+                        })
+                    }
+                    else{
+                        throw new Error('exception in Utility.workingFunction.LS');
+                    }
+                })
+                
+                cb(payLoad);
+            }
+            else{
+                console.error(err);
+            }
+            
+        })
+    }
+  }  
+
+    async function resetWorkspaceRoot(userId,Wsname){
+        let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+        // clean old AppRoot
+        deleteFolderRecursive(source);
+        await fsPromise.mkdir(source);
+
+   }
+
 
 
 
 module.exports = {
-    LoadWSList, LS, CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
+    loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
 }
 
