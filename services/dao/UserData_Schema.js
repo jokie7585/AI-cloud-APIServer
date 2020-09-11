@@ -3,6 +3,28 @@ var ph = require('path');
 var cytus = require('../../utilities/CytusCTL/CytusPrototcol')
 // subDOC
 
+var batch_Schema = new mongoose.Schema({
+    name: String,
+    discription: String,
+    commandTemplete: [{
+        command: String,
+        optionMap: [String]
+    }],
+    branchSet: [{
+        CommandList: [{
+            command: String,
+            optionMap: [{
+                name: String,
+                value: String, // if empty, its an boolean flag
+            }]
+        }],
+        logPath: String,
+        podname: String,
+        name:String,
+        status:String,
+    }]
+});
+
 // schema define
 var workspaceSet_Schema = new mongoose.Schema({
     name: String,
@@ -17,7 +39,8 @@ var workspaceSet_Schema = new mongoose.Schema({
         detail:String
     }],
     scheduleList:[String],
-    commandList: [],
+    commandList: [], // bash command
+    batchConfig: batch_Schema,
     workRecord : [
         {
             logPath:String,
@@ -27,6 +50,7 @@ var workspaceSet_Schema = new mongoose.Schema({
         }
     ]
 });
+
 
 // schema define
 var workMonitor_Schema = new mongoose.Schema({
@@ -72,7 +96,7 @@ UserData_Schema.methods.CreateWorkspaceRecord = function({WsName}) {
     let newConfigRecord = {
         name: WsName,
         LastPodName: null,
-        config: {},
+        config: {tensorflowVersion: 'Init',GpuNum: 0},
         scheduleList:[],
         workRecord:[]
     }
@@ -103,7 +127,7 @@ UserData_Schema.methods.getConfig = function({WsName}) {
     for(element of this.workspaceSet){
         if(element.name === WsName) {
             console.log('in getConfig of : ' + WsName);
-            console.log(element.config)
+            console.log({config: element.config})
             return element.config;
         }
     };
@@ -294,6 +318,49 @@ UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
 
     // if no LastPod
     return undefined;
+}
+
+UserData_Schema.methods.updateBatchConfig = function({WsName, newConfig}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+        }
+    }
+
+    curWorkspace.batchConfig = newConfig
+    console.log({newConfSetted: curWorkspace.batchConfig})
+    
+    // if no LastPod
+    return curWorkspace.batchConfig;
+}
+
+UserData_Schema.methods.GetBatchConfig = function({WsName}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+        }
+    }
+
+    // initial if not exist
+    if( !curWorkspace.batchConfig ) {
+        console.log('Creating batch document')
+        curWorkspace.batchConfig = {
+            name : 'batch',
+            discription : 'discription',
+            commandTemplete: [],
+            branchSet: []
+        }
+        
+        console.log({NewBatchDoc: curWorkspace.batchConfig})
+    }
+    
+
+    // if no LastPod
+    return curWorkspace.batchConfig;
 }
 
 // compile schema to modle

@@ -6,6 +6,7 @@ const SECRET = 'YOUR_JWT_SECRET';
 // 初始化自訂服務
 const WF = require('../utilities/workingFuction')
 const MCS = require('../services/MongoService')
+const jwtVerifier = require('../middlewares/verifyJWT')
 
 function createRouter(dependencies) {
     // get dependencies
@@ -32,7 +33,20 @@ function createRouter(dependencies) {
                     message: err
                 });
             });
-        console.log('async run there!')
+        console.log('async run there!');
+    })
+
+    router.get('/singOut/:userId', jwtVerifier(), function (req, res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                res.clearCookie('token').json({
+                    message: 'signOut sucess!'
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
     })
 
     // 註冊API,若註冊失敗則回傳指定訊息提供前端渲染

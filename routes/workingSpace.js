@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
+const {deleteTempFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
 const {AppError, errorType} = require('../utilities/AppError');
 const { json } = require('express');
@@ -391,6 +391,68 @@ function createRouter(dependencies = {}) {
         }
     })
 
+    router.post('/:userId/management/api/setBatchConfig/:workspaceName', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                // process here
+                MCS.getdocInstance({account:req.User})
+                .then(doc => {
+                    let payload = {
+                        WsName:req.params.workspaceName,
+                        newConfig: req.body,
+                    }
+                    let newConfig = doc.updateBatchConfig(payload)
+                    doc.save()
+                    .then(instance => {
+                        console.log('success save change of set commandList!')
+                        res.json(newConfig);
+                    })
+                    .catch(err=> {
+                        console.log(err);
+                        res.status(502).json({
+                            message:'serverside error occurs plz contact us'
+                        })
+                    })
+                    
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
+    router.get('/:userId/management/api/getBatchConfig/:workspaceName', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            if(req.User === 'Guest') {
+                // 載入Public頁面/資料
+                throw new Error('Guest can not use fileSystem.LS');
+            }
+            else {
+                // process here
+                MCS.getdocInstance({account:req.User})
+                .then(doc => {
+                    res.json(
+                        doc.GetBatchConfig({WsName:req.params.workspaceName})
+                    );
+                })
+                .catch(err=> {
+                    console.log(err)
+                    res.status(502).json({
+                        message:err
+                    })
+                })
+            }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
     // 執行workspace
     router.get('/:userId/management/api/runWorkspace/:workspaceName',veriftJWT(), pathSolver(),function(req, res, next) {
         //let staticPath = path.join(process.env.ROOTPATH, req.params.userId, req.targetPath, req.params.filename);
@@ -410,6 +472,69 @@ function createRouter(dependencies = {}) {
                         credential: req.cookies.token,
                         logPath: newRecord.logPath,
                         podName: newRecord.podName,
+                    }
+                    
+                    GenerateYaml(payLoad)
+                    .then(message => {
+                        // run jobUploader
+                        let {podName, userId, WsName, config} = payLoad
+                        UploadJobToCytus(podName, config.GpuNum, userId, WsName)
+                        .then((msg) => {
+                            console.log(msg.stdout);
+                            console.log(msg.stderr.toString());
+                            doc.save()
+                            .then(() => {
+                                res.json({
+                                    message: 'successful submit jub to Cytus!'
+                                })
+                            })
+                        })
+                        .catch((err) => {
+                            console.log(err.toString())
+                            res.status(500).json({
+                                message: 'server side error occurs, plz contact us!'
+                            })
+                        })
+                        // async log GenerateYaml's message here
+                        console.log(message);
+                    })
+                    .catch(err => {
+                        console.log(err.toString());
+                        res.status(500).json({
+                            message: 'server side error occurs, plz contact us!'
+                        })
+                    })
+                
+                })
+                .catch(err => {
+                    console.log(err.toString());
+                    res.status(500).json({
+                        message: 'server side error occurs, plz contact us!'
+                    })
+                })
+
+        console.log('async end routine but still run!')
+    })
+
+    router.get('/:userId/management/api/runBatch/:workspaceName',veriftJWT(), pathSolver(),function(req, res, next) {
+        //let staticPath = path.join(process.env.ROOTPATH, req.params.userId, req.targetPath, req.params.filename);
+        console.log(req.User + ' start run! :' + req.params.workspaceName )
+        MCS.getdocInstance({account:req.User})
+                .then(doc => {
+                    // generate new workRecord of the workspace
+                    let newRecord = doc.CreateWorkRecord({WsName:req.params.workspaceName});
+                    // start generate yaml
+                    console.log('start create YAML')
+                    let payLoad = {
+                        userId: req.User,
+                        config: doc.getConfig({WsName: req.params.workspaceName}),
+                        scheduleList: doc.getscheduleList({WsName: req.params.workspaceName}),
+                        commandList: doc.getcommandList({WsName: req.params.workspaceName}),
+                        WsName: req.params.workspaceName,
+                        credential: req.cookies.token,
+                        // logPath: newRecord.logPath,
+                        // podName: newRecord.podName,
+                        batchset: doc.GetBatchConfig({WsName: req.params.workspaceName}),
                     }
                     
                     GenerateYaml(payLoad)
@@ -644,6 +769,20 @@ function createRouter(dependencies = {}) {
         // 簽發Upload專用的token(包含每個檔案的相對路徑與此次上傳的根路徑)
         LS(req.params.userId, req.targetPath, (data)=> {
             res.json(data)
+        })
+        
+    })
+
+    router.post('/:userId/management/api/deleteUploadTempFile',veriftJWT(), function(req, res, next) {
+        let {WsName,relativepath,filename } = req.body;
+        deleteTempFile(req.params.userId, WsName, relativepath,  filename)
+        .then((payload)=> {
+            res.json(payload)
+        })
+        .catch(err => {
+            console.log('errors in deleteUploadTempFile!')
+            console.log(err)
+            res.status(500).json({message: 'errors in deleteUploadTempFile!'})
         })
         
     })

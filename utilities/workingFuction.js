@@ -378,18 +378,106 @@ var deleteFolderRecursive = (path) => {
     }
   }  
 
-    async function resetWorkspaceRoot(userId,Wsname){
-        let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+  function LStargetDir(path) {
+    let files = fs.readdirSync(path, {withFileTypes: true});
+    let payLoad = files.map(el => {
+        if(el.isDirectory()) {
+            return({
+                name: el.name,
+                type: 'dir'
+            })
+        }
+        else if(el.isFile()) {
+            return({
+                name: el.name,
+                type: 'file'
+            })
+        }
+        else{
+            throw new Error('exception in Utility.workingFunction.LS');
+        }
+    })
+    return payLoad;
+  }
+
+  async function resetWorkspaceRoot(userId,Wsname){
+    let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+    // clean old AppRoot
+    deleteFolderRecursive(source);
+    await fsPromise.mkdir(source);
+
+   }
+
+   async function deleteTempFile(userId,Wsname,relativepath, fileNmae){
+    let taeget = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath, fileNmae);
+    let targetDir = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath);
+    fs.unlinkSync(taeget);
+    let payload = LStargetDir(targetDir)
+    return payload;
+}
+
+
+   function ComposeCetusPath(userId, Wsname){
+    let cachPath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/cach');
+    let source = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
+    return{cach: cachPath, AppRoot:source }
+   }
+
+   function RunBatchWork(payload){
+    let {batchset} = payload;
+    // 準備資料夾
+    let rootOfBranch = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname);
+
+    for(let branch of batchset) {
+        // 每個branch都必須要有自己的workspace
+        
+    }
+    if(!fs.existsSync(cachPath)) {
+        throw new Error('no cach exist! you might Never run workspace, or cach is just deleted!')
+    }
+    else{
         // clean old AppRoot
         deleteFolderRecursive(source);
-        await fsPromise.mkdir(source);
-
+        let out  = fs.mkdirSync(source)
+        // cach new data
+        let stdout = spawnSync('cp', ['-a', cachPath+'/.', source]);
+        fs.readdir(source, {withFileTypes: true}, (err, files) =>{
+            if(!err) {
+                let payLoad = files.map(el => {
+                    if(el.isDirectory()) {
+                        return({
+                            name: el.name,
+                            type: 'dir'
+                        })
+                    }
+                    else if(el.isFile()) {
+                        return({
+                            name: el.name,
+                            type: 'file'
+                        })
+                    }
+                    else{
+                        throw new Error('exception in Utility.workingFunction.LS');
+                    }
+                })
+                
+                cb(payLoad);
+            }
+            else{
+                console.error(err);
+            }
+            
+        })
+    }
+       // 資料複製
+       // yaml
+       // 塞進k8s
    }
 
 
 
 
 module.exports = {
-    loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
+    deleteTempFile,loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
 }
 
