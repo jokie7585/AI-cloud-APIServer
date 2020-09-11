@@ -313,8 +313,8 @@ var deleteFolderRecursive = (path) => {
     }
   };
 
-  async function UploadJobToCytus(podname,gpunumber, userId, Wsname) {
-    let yamlpath = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/podConfig.yaml')
+  async function UploadJobToCytus(podname,gpunumber, userId, WsName) {
+    let yamlpath = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName, '.secrete/podConfig.yaml')
     // let scriptPath = ph.join(process.cwd(), 'utilities/CytusCTL/jobUploader.js')
     // let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
     // return stdout
