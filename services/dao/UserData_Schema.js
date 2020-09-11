@@ -22,6 +22,8 @@ var batch_Schema = new mongoose.Schema({
         podname: String,
         name:String,
         status:String,
+        root: String,
+        yamalPath: String,
     }]
 });
 

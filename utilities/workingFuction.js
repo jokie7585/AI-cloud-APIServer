@@ -2,6 +2,7 @@
 var fs = require('fs');
 var ph = require('path');
 var jsYaml = require('js-yaml')
+var cytus = require('./CytusCTL/CytusPrototcol')
 const fsPromise = fs.promises;
 var {spawnSync, execFileSync} = require('child_process');
 const { identity } = require('lodash');
@@ -190,7 +191,7 @@ async function GenerateYaml(payLoad) {
                     ],
                     imagePullPolicy: "IfNotPresent",
                     command: ["/bin/sh"],
-                    args: createBashArgs(commandList, WsName), // generat bash args
+                    args: createBashArgs(commandList), // generat bash args
                     volumeMounts: [
                         {
                             mountPath: '/mnt/',
@@ -238,7 +239,7 @@ async function GenerateYaml(payLoad) {
     return 'success create - podConfig.yaml';
 }
 
-function createBashArgs(ScheduleList, Wsname) {
+function createBashArgs(ScheduleList, BatchCommandList) {
     let args = ["-c"];
     let shellScript = '';
     // 編輯指令
@@ -264,6 +265,10 @@ function createBashArgs(ScheduleList, Wsname) {
     console.log('finish args set: ')
     console.log(args);
     return args;
+}
+
+function appendBatchCommand(BatchCommandList) {
+
 }
 
 async function CreateWorkspace(payload) {
@@ -314,6 +319,13 @@ var deleteFolderRecursive = (path) => {
     // let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
     // return stdout
     return spawnSync('kubectl', ['create', '-f', yamlpath]);
+  }
+
+  async function UploadJobToCytus_2(branchset) {
+    for(let branch of branchset) {
+        let {yamalPath} = branch;
+        spawnSync('kubectl', ['create', '-f', yamalPath]);
+    }
   }
 
   async function getFileContentAsString(logPath, cb){
@@ -423,61 +435,158 @@ var deleteFolderRecursive = (path) => {
     return{cach: cachPath, AppRoot:source }
    }
 
-   function RunBatchWork(payload){
-    let {batchset} = payload;
+   async function RunBatchWork(payload){
+    let {batchset, userId, WsName, config, scheduleList, commandList, credential} = payload;
+    let newbatchset = []
     // 準備資料夾
+    let SourceRoot = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
     let rootOfBranch = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname);
+    let rootOfLogs = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/logs');
 
     for(let branch of batchset) {
         // 每個branch都必須要有自己的workspace
-        
+        let {name, CommandList} = branch;
+        let timestamp = new Date();
+        let podName = `${this.userId}.${WsName}-${name}-${timestamp.getTime()}`.toLocaleLowerCase();
+        let root = ph.join(rootOfBranch, name);
+        let logPath =  ph.join(rootOfLogs, podName+'.txt')
+        let yamalPath =  ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete', name);
+        // prepare structure to generate yaml & update database
+        let registPayload = {
+            podName: podName,
+            root: root,
+            config: config,
+            scheduleList: scheduleList,
+            commandList: commandList,
+            credential: credential,
+            logPath: logPath,
+            userId: userId,
+            WsName: WsName,
+            yamalPath:yamalPath
+        }
+        // push into "newbatchset" structure
+        newbatchset.push(registPayload)
+
+        // clean old branch root
+        deleteFolderRecursive(root);
+        let out  = fs.mkdirSync(root)
+        // load data from AppRoot
+        let stdout = spawnSync('cp', ['-a', SourceRoot+'/.', root]);
+        // end of data preparing
+
+        // Generate yaml
+        GenerateYaml_BatchUse(registPayload);
+
     }
-    if(!fs.existsSync(cachPath)) {
-        throw new Error('no cach exist! you might Never run workspace, or cach is just deleted!')
-    }
-    else{
-        // clean old AppRoot
-        deleteFolderRecursive(source);
-        let out  = fs.mkdirSync(source)
-        // cach new data
-        let stdout = spawnSync('cp', ['-a', cachPath+'/.', source]);
-        fs.readdir(source, {withFileTypes: true}, (err, files) =>{
-            if(!err) {
-                let payLoad = files.map(el => {
-                    if(el.isDirectory()) {
-                        return({
-                            name: el.name,
-                            type: 'dir'
-                        })
-                    }
-                    else if(el.isFile()) {
-                        return({
-                            name: el.name,
-                            type: 'file'
-                        })
-                    }
-                    else{
-                        throw new Error('exception in Utility.workingFunction.LS');
-                    }
-                })
-                
-                cb(payLoad);
+
+    return newbatchset
+    
+}
+
+async function GenerateYaml_BatchUse(payLoad) {
+    let {userId, config,commandList, scheduleList, WsName,credential,logPath,podName, root,yamalPath} = payLoad;
+    let workspaceRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName).toString();
+    let AppLogRoot = ph.join(workspaceRoot, '.secrete/logs')
+    console.log('volumes path :')
+    console.log(workspaceRoot)
+    // normlized path in container
+    var getLogPathInContainer = new RegExp(/\/\.secrete(.*)/);
+    let logPathInContainer = logPath.match(getLogPathInContainer)[1];
+    // prepare config
+    let Podname = podName; // assign podName
+    let {tensorflowVersion, GpuNum} = config;
+    // yaml Template
+    let yaml = {
+        apiVersion: "v1",
+        kind: "Pod",
+        metadata: {
+            name: Podname.toLocaleLowerCase(), // pod name should be lower case
+            labels: {
+                app: "tensorflow-runtime"
             }
-            else{
-                console.error(err);
-            }
-            
-        })
+        },
+        spec: {
+            restartPolicy: "Never",
+            containers: [
+                {
+                    name: "tensorflow-runtime",
+                    image: "tensorflow/tensorflow:" + tensorflowVersion, // tensorflowVersion
+                    env: [
+                        {
+                            name: "APISERVER_IP",
+                            value: process.env.APISERVER_IP
+                        },
+                        {
+                            name: "USERID",
+                            value: userId
+                        },
+                        {
+                            name: "WsName",
+                            value: WsName
+                        },
+                        {
+                            // this is the public key for k8s cluster to access apiserver
+                            name: "Session_Token",
+                            value: credential
+                        },
+                        {
+                            name: "LogPath",
+                            value: logPathInContainer
+                        }
+                    ],
+                    imagePullPolicy: "IfNotPresent",
+                    command: ["/bin/sh"],
+                    args: createBashArgs(commandList), // generat bash args
+                    volumeMounts: [
+                        {
+                            mountPath: '/mnt/',
+                            name: "work-space"
+                        },
+                        {
+                            mountPath: "/logs/",
+                            name: "log-root"
+                        }
+                    ],
+                    resources: {
+                        limits: {
+                            'nvidia.com/gpu': GpuNum
+                        }
+                    }
+                }
+            ],
+            volumes: [
+                {
+                    name: "work-space",
+                    hostPath: {
+                        path: root, // workspaceRoot here
+                        type: "Directory"
+                    }
+                },
+                {
+                    name: "log-root",
+                    hostPath: {
+                        path: AppLogRoot, // workspaceRoot here
+                        type: "Directory"
+                    }
+                },
+            ]
+        }
     }
-       // 資料複製
-       // yaml
-       // 塞進k8s
-   }
+
+    // 寫入指定資料夾
+    let yamlStream = jsYaml.dump(yaml, jsYaml.JSON_SCHEMA)
+    let fileHandler = await fsPromise.open(yamalPath, 'w+');
+    console.log('start write')
+    await fileHandler.writeFile(yamlStream)
+    console.log('end write')
+    await fileHandler.close();
+    return 'success create - ' + yamalPath;
+}
 
 
 
 
 module.exports = {
-    deleteTempFile,loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
+    UploadJobToCytus_2, RunBatchWork, deleteTempFile,loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
 }
 

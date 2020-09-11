@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {deleteTempFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
+const {UploadJobToCytus_2,RunBatchWork,deleteTempFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
 const {AppError, errorType} = require('../utilities/AppError');
 const { json } = require('express');
@@ -537,18 +537,21 @@ function createRouter(dependencies = {}) {
                         batchset: doc.GetBatchConfig({WsName: req.params.workspaceName}),
                     }
                     
-                    GenerateYaml(payLoad)
-                    .then(message => {
+                    RunBatchWork(payLoad)
+                    .then(newbranchset => {
+                        // "newbranchset" 內所有的工作都上傳到Cetus
+                        /**
+                         *  ~ <Code> ~
+                         */
                         // run jobUploader
-                        let {podName, userId, WsName, config} = payLoad
-                        UploadJobToCytus(podName, config.GpuNum, userId, WsName)
+                        UploadJobToCytus_2(newbranchset)
                         .then((msg) => {
                             console.log(msg.stdout);
                             console.log(msg.stderr.toString());
                             doc.save()
                             .then(() => {
                                 res.json({
-                                    message: 'successful submit jub to Cytus!'
+                                    message: 'successful submit batch to Cytus!'
                                 })
                             })
                         })
