@@ -10,6 +10,7 @@ var batch_Schema = new mongoose.Schema({
         command: String,
         optionMap: [String]
     }],
+    status: String,
     branchSet: [{
         CommandList: [{
             command: String,
@@ -24,6 +25,8 @@ var batch_Schema = new mongoose.Schema({
         status:String,
         root: String,
         yamalPath: String,
+        timeStart: Date,
+        timeEnd: Date
     }]
 });
 
@@ -274,6 +277,26 @@ UserData_Schema.methods.Get_LastPod_Record = function({WsName}) {
     return undefined;
 }
 
+UserData_Schema.methods.Get_Branch_Record = function({WsName, branch}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+            break;
+        }
+    }
+    for(element of curWorkspace.batchConfig.branchSet) {
+        if(element.name === branch) {
+            // 取得選定的workspace
+            return element;
+        }
+    }
+
+    return undefined;
+
+}
+
 UserData_Schema.methods.Set_LastPod_Running = function({WsName}) {
     let curWorkspace;
     for(element of this.workspaceSet) {
@@ -298,6 +321,27 @@ UserData_Schema.methods.Set_LastPod_Running = function({WsName}) {
     return undefined;
 }
 
+UserData_Schema.methods.Set_Batch_Branch_Running = function({WsName, branch}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+            break;
+        }
+    }
+    for(element of curWorkspace.batchConfig.branchSet) {
+        if(element.name === branch) {
+            // 取得選定的workspace
+            element.status = cytus.CytusAppStatus.RUNNING;
+            return element;
+        }
+    }
+
+    return undefined;
+
+}
+
 UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
     let curWorkspace;
     for(element of this.workspaceSet) {
@@ -320,6 +364,26 @@ UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
 
     // if no LastPod
     return undefined;
+}
+
+UserData_Schema.methods.Set_Batch_Branch_Finished = function({WsName, branch}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+        }
+    }
+    for(element of curWorkspace.batchConfig.branchSet) {
+        if(element.name === branch) {
+            // 取得選定的workspace
+            element.status = cytus.CytusAppStatus.COMPLETE;
+            return element;
+        }
+    }
+
+    return undefined;
+
 }
 
 UserData_Schema.methods.updateBatchConfig = function({WsName, newConfig}) {
@@ -347,14 +411,15 @@ UserData_Schema.methods.GetBatchConfig = function({WsName}) {
         }
     }
 
-    // initial if not exist
+    // initial if batchConfig not exist
     if( !curWorkspace.batchConfig ) {
         console.log('Creating batch document')
         curWorkspace.batchConfig = {
             name : 'batch',
             discription : 'discription',
             commandTemplete: [],
-            branchSet: []
+            branchSet: [],
+
         }
         
         console.log({NewBatchDoc: curWorkspace.batchConfig})

@@ -6,6 +6,8 @@ var cytus = require('./CytusCTL/CytusPrototcol')
 const fsPromise = fs.promises;
 var {spawnSync, execFileSync} = require('child_process');
 const { identity } = require('lodash');
+const { CytusAppStatus } = require('./CytusCTL/CytusPrototcol');
+const { option } = require('yargs');
 
 
 function LoadWSList (userId, cb) {
@@ -180,6 +182,10 @@ async function GenerateYaml(payLoad) {
                             value: WsName
                         },
                         {
+                            name: "branch",
+                            value: 'Template'
+                        },
+                        {
                             // this is the public key for k8s cluster to access apiserver
                             name: "Session_Token",
                             value: credential
@@ -246,7 +252,7 @@ function createBashArgs(ScheduleList, BatchCommandList) {
     // 切換至容器工作區
     shellScript = shellScript.concat('cd /mnt;');
     // 殺出request告知server此pod成功啟動並更新資料庫
-    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName ;`);
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName/$branch ;`);
     // 初始化logFile
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
     for (command of ScheduleList) {
@@ -256,7 +262,7 @@ function createBashArgs(ScheduleList, BatchCommandList) {
         
     }
     // 發出 curl 請求,通知server完成工作
-    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setFinish/$WsName ;`);
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setFinish/$WsName/$branch ;`);
     // 提示使用者是否執行完畢
     shellScript = shellScript.concat('echo "\nConsole diconnected!..." >> $LogPath;');
     // 結束shell
@@ -324,10 +330,17 @@ var deleteFolderRecursive = (path) => {
   async function UploadJobToCytus_2(branchset) {
     for(let branch of branchset) {
         let {yamalPath} = branch;
-        spawnSync('kubectl', ['create', '-f', yamalPath]);
+        let stdout = spawnSync('kubectl', ['create', '-f', yamalPath]);
+        console.log(yamalPath)
+        console.log(stdout.stdout.toString())
+        console.log(stdout.output.toString())
+        console.log(stdout.stderr.toString())
     }
+    return 'success submit batch to Cetus';
   }
 
+  ///Users/tsaipengying/Desktop/工具學習/nodejs_Backend_Learning/hello_express/Storage/fs/Workspace/catdog/.secrete/branch0.yaml
+  ///Users/tsaipengying/Desktop/工具學習/nodejs_Backend_Learning/hello_express/Storage/fs/Workspace/catdog/.secrete/branch0.yaml
   async function getFileContentAsString(logPath, cb){
     let fr = await fsPromise.open(logPath, 'r');
     let content = await fr.readFile({encoding: 'utf-8'});
@@ -420,7 +433,7 @@ var deleteFolderRecursive = (path) => {
 
    }
 
-   async function deleteTempFile(userId,Wsname,relativepath, fileNmae){
+   async function deleteFile(userId,Wsname,relativepath, fileNmae){
     let taeget = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath, fileNmae);
     let targetDir = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath);
     fs.unlinkSync(taeget);
@@ -439,31 +452,38 @@ var deleteFolderRecursive = (path) => {
     let {batchset, userId, WsName, config, scheduleList, commandList, credential} = payload;
     let newbatchset = []
     // 準備資料夾
-    let SourceRoot = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot');
-    let rootOfBranch = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname);
-    let rootOfLogs = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete/logs');
+    let SourceRoot = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName, 'AppRoot');
+    let rootOfBranch = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName);
+    let rootOfLogs = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName, '.secrete/logs');
 
     for(let branch of batchset) {
         // 每個branch都必須要有自己的workspace
         let {name, CommandList} = branch;
         let timestamp = new Date();
-        let podName = `${this.userId}.${WsName}-${name}-${timestamp.getTime()}`.toLocaleLowerCase();
+        let podName = `${userId}.${WsName}-${name}-${timestamp.getTime()}`.toLocaleLowerCase();
         let root = ph.join(rootOfBranch, name);
         let logPath =  ph.join(rootOfLogs, podName+'.txt')
-        let yamalPath =  ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, '.secrete', name);
+        let yamalPath =  ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName, '.secrete', name+'.yaml');
         // prepare structure to generate yaml & update database
         let registPayload = {
             podName: podName,
+            branchName: name,
             root: root,
             config: config,
             scheduleList: scheduleList,
-            commandList: commandList,
+            commandList: CommandList,
             credential: credential,
             logPath: logPath,
             userId: userId,
             WsName: WsName,
             yamalPath:yamalPath
         }
+        // set branch info
+        branch.logPath = logPath
+        branch.podname = podName
+        branch.root = root
+        branch.yamalPath = yamalPath
+        branch.status = CytusAppStatus.WAIT
         // push into "newbatchset" structure
         newbatchset.push(registPayload)
 
@@ -475,7 +495,7 @@ var deleteFolderRecursive = (path) => {
         // end of data preparing
 
         // Generate yaml
-        GenerateYaml_BatchUse(registPayload);
+        await GenerateYaml_BatchUse(registPayload);
 
     }
 
@@ -484,7 +504,7 @@ var deleteFolderRecursive = (path) => {
 }
 
 async function GenerateYaml_BatchUse(payLoad) {
-    let {userId, config,commandList, scheduleList, WsName,credential,logPath,podName, root,yamalPath} = payLoad;
+    let {userId, branchName, config,commandList, scheduleList, WsName,credential,logPath,podName, root,yamalPath} = payLoad;
     let workspaceRoot = ph.join(process.env.ROOTPATH,userId, 'Workspace',WsName).toString();
     let AppLogRoot = ph.join(workspaceRoot, '.secrete/logs')
     console.log('volumes path :')
@@ -525,6 +545,10 @@ async function GenerateYaml_BatchUse(payLoad) {
                             value: WsName
                         },
                         {
+                            name: "branch",
+                            value: branchName
+                        },
+                        {
                             // this is the public key for k8s cluster to access apiserver
                             name: "Session_Token",
                             value: credential
@@ -536,7 +560,7 @@ async function GenerateYaml_BatchUse(payLoad) {
                     ],
                     imagePullPolicy: "IfNotPresent",
                     command: ["/bin/sh"],
-                    args: createBashArgs(commandList), // generat bash args
+                    args: createBashArgs_BatchUse(commandList), // generat bash args
                     volumeMounts: [
                         {
                             mountPath: '/mnt/',
@@ -583,10 +607,52 @@ async function GenerateYaml_BatchUse(payLoad) {
     return 'success create - ' + yamalPath;
 }
 
+function createBashArgs_BatchUse(ScheduleList) {
+    let args = ["-c"];
+    let shellScript = '';
+    // 編輯指令
+    // 切換至容器工作區
+    shellScript = shellScript.concat('cd /mnt;');
+    // 殺出request告知server此pod成功啟動並更新資料庫
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName/$branch ;`);
+    // 初始化logFile
+    shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
+    for (command of ScheduleList) {
+        if(command[0] != '#') {
+            shellScript = shellScript.concat(composeCommandFlag(command.command, command.optionMap) + ' >> $LogPath 2>&1;');
+        }
+        
+    }
+    // 發出 curl 請求,通知server完成工作
+    shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setFinish/$WsName/$branch ;`);
+    // 提示使用者是否執行完畢
+    shellScript = shellScript.concat('echo "\nConsole diconnected!..." >> $LogPath;');
+    // 結束shell
+    // shellScript = shellScript.concat('done');
+    args.push(shellScript);
+    console.log('finish args set: ')
+    console.log(args);
+    return args;
+}
+
+function composeCommandFlag(command, optionMap) {
+    let fullCommand = command;
+    for (el of optionMap) {
+        if(el.value == 'true' || el.value == 'false' ) {
+
+        }
+        else {
+            fullCommand = fullCommand + ' ' +  `${el.name}=${el.value}`
+        }
+    }
+
+    return fullCommand;
+}
+
 
 
 
 module.exports = {
-    UploadJobToCytus_2, RunBatchWork, deleteTempFile,loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
+    UploadJobToCytus_2, RunBatchWork, deleteFile,loadWorkspaceCach,LoadWSList, cachWorkspace, LS,resetWorkspaceRoot ,CreateUserRootFolder,RunWorkspace,DeleteWorkspace,CreateWorkspace,GenerateYaml,UploadJobToCytus,getFileContentAsString
 }
 

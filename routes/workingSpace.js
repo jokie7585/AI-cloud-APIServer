@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
-const {UploadJobToCytus_2,RunBatchWork,deleteTempFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
+const {UploadJobToCytus_2,RunBatchWork,deleteFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
 const {AppError, errorType} = require('../utilities/AppError');
 const { json } = require('express');
@@ -480,7 +480,7 @@ function createRouter(dependencies = {}) {
                         let {podName, userId, WsName, config} = payLoad
                         UploadJobToCytus(podName, config.GpuNum, userId, WsName)
                         .then((msg) => {
-                            console.log(msg.stdout);
+                            console.log(msg.stdout.toString());
                             console.log(msg.stderr.toString());
                             doc.save()
                             .then(() => {
@@ -529,12 +529,12 @@ function createRouter(dependencies = {}) {
                         userId: req.User,
                         config: doc.getConfig({WsName: req.params.workspaceName}),
                         scheduleList: doc.getscheduleList({WsName: req.params.workspaceName}),
-                        commandList: doc.getcommandList({WsName: req.params.workspaceName}),
+                        // commandList: doc.getcommandList({WsName: req.params.workspaceName}),
                         WsName: req.params.workspaceName,
-                        credential: req.cookies.token,
+                        credential: req.cookies.token, // inner System private access key
                         // logPath: newRecord.logPath,
                         // podName: newRecord.podName,
-                        batchset: doc.GetBatchConfig({WsName: req.params.workspaceName}),
+                        batchset: doc.GetBatchConfig({WsName: req.params.workspaceName}).branchSet,
                     }
                     
                     RunBatchWork(payLoad)
@@ -545,24 +545,25 @@ function createRouter(dependencies = {}) {
                          */
                         // run jobUploader
                         UploadJobToCytus_2(newbranchset)
-                        .then((msg) => {
-                            console.log(msg.stdout);
-                            console.log(msg.stderr.toString());
+                        .then( msg => {
+                            console.log(msg);
                             doc.save()
                             .then(() => {
                                 res.json({
                                     message: 'successful submit batch to Cytus!'
                                 })
                             })
+                            .catch(err => {
+                                console.log(err)
+                            })
                         })
                         .catch((err) => {
+                            console.log('fail push batch to Cetus');
                             console.log(err.toString())
                             res.status(500).json({
                                 message: 'server side error occurs, plz contact us!'
                             })
                         })
-                        // async log GenerateYaml's message here
-                        console.log(message);
                     })
                     .catch(err => {
                         console.log(err.toString());
@@ -583,7 +584,7 @@ function createRouter(dependencies = {}) {
     })
 
     // only return the newest log, and notify is pod finished yet.
-    router.get('/:userId/management/api/getWorkspaceLog/:workspaceName', veriftJWT(), function( req,res, next) {
+    router.get('/:userId/management/api/getWorkspaceLog/:workspaceName/:branch', veriftJWT(), function( req,res, next) {
         if(req.User == req.params.userId) {
             if(req.User === 'Guest') {
                 // 載入Public頁面/資料
@@ -594,7 +595,13 @@ function createRouter(dependencies = {}) {
                 MCS.getdocInstance({account:req.User})
                 .then(doc => {
                     // 取得該user的doc後取出最新的pod的workrecords
-                    let record = doc.Get_LastPod_Record({WsName:req.params.workspaceName});
+                    let record = undefined;
+                    if(req.params.branch == 'Template') {
+                        record = doc.Get_LastPod_Record({WsName:req.params.workspaceName});
+                    }
+                    else {
+                        record = doc.Get_Branch_Record({WsName:req.params.workspaceName, branch:req.params.branch});
+                    }
                     console.log('Lastest records is:')
                     console.log(record);
                     if(record) {
@@ -639,6 +646,7 @@ function createRouter(dependencies = {}) {
                             })
                         }
                         
+                        
                     }
                     else {
                         res.status(500).json({
@@ -654,10 +662,16 @@ function createRouter(dependencies = {}) {
         }
     })
 
-    router.get('/:userId/management/api/workRecord/setRunning/:workspaceName', function( req,res, next) {
+    router.get('/:userId/management/api/workRecord/setRunning/:workspaceName/:branch', function( req,res, next) {
         MCS.getdocInstance({account: req.params.userId})
         .then( doc => {
-            let newRecord = doc.Set_LastPod_Running({WsName: req.params.workspaceName});
+            let newRecord = undefined;
+            if(req.params.branch == 'Template'){
+                newRecord = doc.Set_LastPod_Running({WsName: req.params.workspaceName});
+            }
+            else{
+                newRecord = doc.Set_Batch_Branch_Running({WsName: req.params.workspaceName, branch:req.params.branch});
+            }
             if(newRecord) {
                 doc.save()
                 .then(doc=>{
@@ -688,10 +702,17 @@ function createRouter(dependencies = {}) {
     })
 
     // this api only accept k8s cluster to call, should check the orign
-    router.get('/:userId/management/api/workRecord/setFinish/:workspaceName', function( req,res, next) {
+    router.get('/:userId/management/api/workRecord/setFinish/:workspaceName/:branch', function( req,res, next) {
         MCS.getdocInstance({account: req.params.userId})
         .then( doc => {
-            let newRecord = doc.Set_LastPod_Finished({WsName: req.params.workspaceName});
+            let newRecord;
+            if(req.params.branch == 'Template') {
+                newRecord = doc.Set_LastPod_Finished({WsName: req.params.workspaceName});
+            }
+            else {
+                newRecord = doc.Set_Batch_Branch_Finished({WsName: req.params.workspaceName, branch:req.params.branch});
+            }
+            // if setted doc.save();
             if(newRecord) {
                 doc.save()
                 .then(doc=>{
@@ -722,7 +743,7 @@ function createRouter(dependencies = {}) {
     })
 
     // get dir(repository/workingspaceList) include root of user
-    router.get('/:userId/:path',veriftJWT(),pathSolver(),function(req, res, next) {
+    router.get('/:userId/:path/:branch',veriftJWT(),pathSolver(),function(req, res, next) {
         if(req.User == req.params.userId) {
             if(req.User === 'Guest') {
                 // 載入Public頁面/資料
@@ -767,7 +788,7 @@ function createRouter(dependencies = {}) {
     })
 
     // get root(repository/workingspaceList) of user
-    router.post('/:userId/:path/upload',veriftJWT(), pathSolver(), upload.array('uploadfiles'), function(req, res, next) {
+    router.post('/:userId/:path/upload/:branch',veriftJWT(), pathSolver(), upload.array('uploadfiles'), function(req, res, next) {
         // process upload request
         // 簽發Upload專用的token(包含每個檔案的相對路徑與此次上傳的根路徑)
         LS(req.params.userId, req.targetPath, (data)=> {
@@ -776,9 +797,9 @@ function createRouter(dependencies = {}) {
         
     })
 
-    router.post('/:userId/management/api/deleteUploadTempFile',veriftJWT(), function(req, res, next) {
+    router.post('/:userId/management/api/deleteFile',veriftJWT(), function(req, res, next) {
         let {WsName,relativepath,filename } = req.body;
-        deleteTempFile(req.params.userId, WsName, relativepath,  filename)
+        deleteFile(req.params.userId, WsName, relativepath,  filename)
         .then((payload)=> {
             res.json(payload)
         })
@@ -791,7 +812,7 @@ function createRouter(dependencies = {}) {
     })
 
     // process downoad
-    router.get('/:userId/:path/:filename/download',veriftJWT(), pathSolver(),function(req, res, next) {
+    router.get('/:userId/:path/:filename/download/:branch',veriftJWT(), pathSolver(),function(req, res, next) {
         let staticPath = path.join(process.env.ROOTPATH, req.params.userId, req.targetPath, req.params.filename);
         res.download(staticPath, req.params.filename, (err)=> {
             if(err) return console.log(err);

@@ -7,6 +7,14 @@ module.exports = function(option = {}) {
     return function(req, res, next) {
         console.log('InPathsolver!!')
         let path = _.get(req, pathName);
+        let branch = _.get(req, 'params.branch');
+        let rootName = undefined;
+        if(branch == 'Template') {
+            rootName = 'AppRoot'
+        }
+        else {
+            rootName = branch
+        }
         if(path) {
             console.log('original: '+path);
             path = path.replace(new RegExp('>>', 'g'),'/');
@@ -14,7 +22,7 @@ module.exports = function(option = {}) {
             path = ph.normalize(path)
             let Wsname = path.split('/')[1]
             path = path.split('/').slice(2).join('/');
-            path = ph.join( 'Workspace', Wsname, 'AppRoot', path )
+            path = ph.join( 'Workspace', Wsname, rootName, path )
             console.log('proccessed: '+ path);
             req.targetPath = path;
         }
