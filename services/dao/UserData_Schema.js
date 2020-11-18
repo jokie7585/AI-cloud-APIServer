@@ -1,5 +1,6 @@
 var mongoose = require('mongoose');
 var ph = require('path');
+const { string } = require('yargs');
 var cytus = require('../../utilities/CytusCTL/CytusPrototcol')
 // subDOC
 
@@ -45,6 +46,7 @@ var workspaceSet_Schema = new mongoose.Schema({
     }],
     scheduleList:[String],
     commandList: [], // bash command
+    commandList_lastUpdate: String,
     batchConfig: batch_Schema,
     workRecord : [
         {
@@ -52,6 +54,8 @@ var workspaceSet_Schema = new mongoose.Schema({
             podName:String,
             status:String,
             CreateDate:Date,
+            timeStart: Date,
+            timeEnd: Date
         }
     ]
 });
@@ -75,6 +79,13 @@ var workMonitor_Schema = new mongoose.Schema({
             Title:String,
             Message:String,
         }
+    ],
+    history: [
+        {
+            workspace: String,
+            branch: String,
+            operation: String
+        }
     ]
 });
 
@@ -83,8 +94,9 @@ var UserData_Schema = new mongoose.Schema({
     account: String,
     password: String,
     rootPath: String,
+    UserCredit: String,
     workspaceSet: [workspaceSet_Schema],
-    WorkMonitor: workMonitor_Schema
+    Monitor: workMonitor_Schema
 });
 
 // add functionality to schema(mongoDocument)
@@ -168,9 +180,43 @@ UserData_Schema.methods.getcommandList = function({WsName}) {
         if(element.name === WsName) {
             console.log('in getcommandList of : ' + WsName);
             console.log(element.commandList)
-            return element.commandList;
+            return {
+                commandList: element.commandList,
+                lastUpdate: element.commandList_lastUpdate
+            }
         }
     };
+
+    return [];
+    
+};
+
+UserData_Schema.methods.getBranchcommandList = function({WsName, branch}) {
+    let curWorkspace;
+    for(element of this.workspaceSet) {
+        if(element.name === WsName) {
+            // 取得選定的workspace
+            curWorkspace = element;
+            break;
+        }
+    }
+    for(element of curWorkspace.batchConfig.branchSet) {
+        if(element.name === branch) {
+            // 取得選定的branch
+            // initialize TempArray
+            let ProcessedcommandList = []
+            // compose CommandList
+            for(let command of element.CommandList) {
+                let composedCmd = command.command;
+                for( let flag of command.optionMap ) {
+                    composedCmd = composedCmd.concat(' ', `${flag.name}==${flag.value}`)
+                }
+                ProcessedcommandList.push(composedCmd)
+            }
+
+            return ProcessedcommandList
+        }
+    }
 
     return [];
     
@@ -183,6 +229,7 @@ UserData_Schema.methods.setcommandList = function({WsName, payload}) {
     for(element of this.workspaceSet) {
         if(element.name === WsName) {
             element.commandList = commandList;
+            element.commandList_lastUpdate = new Date();
             console.log('end setting setcommandList with update exist workspaceset')
             return ;
         }
@@ -239,7 +286,7 @@ UserData_Schema.methods.CreateWorkRecord = function({WsName}) {
     // 開始創建新的record
     // 記錄時間戳記
     let timestamp = new Date();
-    let podName = `${this.account}.${WsName}-${timestamp.getTime()}`;
+    let podName = `${this.account}.${WsName}-Template-${timestamp.getTime()}`;
     let newRecord = {
         logPath: ph.join(process.env.ROOTPATH, this.account, 'Workspace', WsName, '.secrete/logs', podName+'.txt'),
         podName: podName.toLocaleLowerCase(),
@@ -313,6 +360,8 @@ UserData_Schema.methods.Set_LastPod_Running = function({WsName}) {
         if(element.podName === curWorkspace.LastPodName) {
             // 取得選定的workspace
             element.status = cytus.CytusAppStatus.RUNNING;
+            let time = new Date();
+            element.timeStart = time
             return element;
         }
     }
@@ -333,7 +382,9 @@ UserData_Schema.methods.Set_Batch_Branch_Running = function({WsName, branch}) {
     for(element of curWorkspace.batchConfig.branchSet) {
         if(element.name === branch) {
             // 取得選定的workspace
+            let time = new Date();
             element.status = cytus.CytusAppStatus.RUNNING;
+            element.timeStart = time
             return element;
         }
     }
@@ -358,6 +409,8 @@ UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
         if(element.podName === curWorkspace.LastPodName) {
             // 取得選定的workspace
             element.status = cytus.CytusAppStatus.COMPLETE;
+            let time = new Date();
+            element.timeEnd = time
             return element;
         }
     }
@@ -378,6 +431,8 @@ UserData_Schema.methods.Set_Batch_Branch_Finished = function({WsName, branch}) {
         if(element.name === branch) {
             // 取得選定的workspace
             element.status = cytus.CytusAppStatus.COMPLETE;
+            let time = new Date();
+            element.timeEnd = time
             return element;
         }
     }

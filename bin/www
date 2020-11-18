@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+let CetusScoket = require('../utilities/Socket')
+
 /**
  * Module dependencies.
  */
@@ -7,6 +9,7 @@
 var app = require('../app');
 var debug = require('debug')('hello-express:server');
 var http = require('http');
+const cetusSocket = require('../utilities/Socket');
 
 /**
  * Get port from environment and store in Express.
@@ -28,6 +31,12 @@ var server = http.createServer(app);
 server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+
+/**
+ * init socket 
+ */
+ 
+ cetusSocket.initSocketUseExistServer(server);
 
 /**
  * Normalize a port into a number, string, or false.

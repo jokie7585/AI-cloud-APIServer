@@ -10,7 +10,7 @@ require('dotenv').config();
 
 // configure cors
 const corsOption = {
-  "origin": ["http://localhost:3000", "http://192.168.43.90:4200", "http://192.168.43.219:4200", process.env.FrontendIP, "http://192.168.43.219:3008"],
+  "origin": ["http://localhost:3000", "http://192.168.43.90:4200", "http://192.168.43.219:4200","http://localhost:4200", process.env.FrontendIP, "http://192.168.43.219:3008"],
   "credentials": true,
   "exposedHeaders":["Content-Disposition","X-AICLOUD-ENDLOG"]
 }
@@ -63,7 +63,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-//app.use(printURL);
 // 串接router
 app.use('/', indexRouter);
 app.use('/users', usersRouter);

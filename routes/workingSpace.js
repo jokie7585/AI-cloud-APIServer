@@ -1,13 +1,14 @@
 const express = require('express');
 const multer = require('multer');
 const path = require('path')
+const fs = require('fs')
 const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
 const {UploadJobToCytus_2,RunBatchWork,deleteFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
+const WebSocet = require('../utilities/Socket')
 const {AppError, errorType} = require('../utilities/AppError');
-const { json } = require('express');
-
+const Socket = require('../utilities/Socket');
 
 function createRouter(dependencies = {}) {
     // get dependencies
@@ -19,14 +20,22 @@ function createRouter(dependencies = {}) {
         destination: function (req, file, callBack) {
             console.log(req.targetPath)
             console.log('StoragePath: '+process.env.ROOTPATH + req.params.userId + '/' + req.targetPath);
+            req.multerdestination = process.env.ROOTPATH + req.params.userId + '/' + req.targetPath;
             callBack(null, process.env.ROOTPATH + req.params.userId + '/' + req.targetPath)
         },
         filename: function (req, file, callBack) {
-            callBack(null, file.originalname);
+            let relativePath = file.originalname.split('/');
+            relativePath = relativePath.slice(1, relativePath.length-1);
+            let processedPath = path.join(req.multerdestination, ...relativePath);
+            fs.mkdir(processedPath, {recursive: true}, err => {
+                // do Nothing
+            })
+            console.log('filePathFromUserhost: ' + file.originalname)
+            callBack(null, file.originalname.split('/').slice(1).join('/'));
         }
     })
     // 初始化multer
-    var upload = multer({storage: storage})
+    var upload = multer({storage: storage, preservePath: true})
 
     // 新增workspace
     router.post('/:userId/management/api/createWorkspace', veriftJWT(), function( req,res, next) {
@@ -346,6 +355,7 @@ function createRouter(dependencies = {}) {
                     .then(instance => {
                         console.log('success save change of set commandList!')
                         res.json({
+                            
                             schedulList:doc.getcommandList({WsName:req.params.workspaceName})
                         });
                     })
@@ -365,31 +375,54 @@ function createRouter(dependencies = {}) {
     })
 
 
-    router.get('/:userId/management/api/getWorkspaceCommandList/:workspaceName', veriftJWT(), function( req,res, next) {
+    router.get('/:userId/management/api/getWorkspaceCommandList/:workspaceName/:branch', veriftJWT(), function( req,res, next) {
         if(req.User == req.params.userId) {
             if(req.User === 'Guest') {
                 // 載入Public頁面/資料
                 throw new Error('Guest can not use fileSystem.LS');
             }
             else {
-                // process here
-                MCS.getdocInstance({account:req.User})
-                .then(doc => {
-                    res.json({
-                        commandList:doc.getcommandList({WsName:req.params.workspaceName})
-                    });
-                })
-                .catch(err=> {
-                    res.status(502).json({
-                        message:err
+                if(req.params.branch == 'Template') {
+                    // process here
+                    MCS.getdocInstance({account:req.User})
+                    .then(doc => {
+                        let {commandList, lastUpdate} = doc.getcommandList({WsName:req.params.workspaceName})
+                        res.json({
+                            commandList:commandList,
+                            lastUpdate: lastUpdate
+                        });
                     })
-                })
+                    .catch(err=> {
+                        res.status(502).json({
+                            message:err
+                        })
+                    })
+                }
+                else {
+                    // process here
+                    MCS.getdocInstance({account:req.User})
+                    .then(doc => {
+                        res.json({
+                            commandList:doc.getBranchcommandList({WsName:req.params.workspaceName, branch: req.params.branch})
+                        });
+                    })
+                    .catch(err=> {
+                        res.status(502).json({
+                            message:err
+                        })
+                    })
+                }
+                
             }
         }
         else {
             throw new Error('no jwt token, plz login to use your workingSpace')
         }
     })
+
+    /**
+     * Branch Management API
+     */
 
     router.post('/:userId/management/api/setBatchConfig/:workspaceName', veriftJWT(), function( req,res, next) {
         if(req.User == req.params.userId) {
@@ -447,6 +480,15 @@ function createRouter(dependencies = {}) {
                     })
                 })
             }
+        }
+        else {
+            throw new Error('no jwt token, plz login to use your workingSpace')
+        }
+    })
+
+    router.get('/:userId/management/api/Branch/delete/:branch', veriftJWT(), function( req,res, next) {
+        if(req.User == req.params.userId) {
+            // delete branch record and root
         }
         else {
             throw new Error('no jwt token, plz login to use your workingSpace')
@@ -677,6 +719,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=>{
                     console.log('set record running:')
                     console.log(newRecord)
+                    Socket.updateComponent(req.params.userId, 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{
@@ -718,6 +761,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=>{
                     console.log('set record finished:')
                     console.log(newRecord)
+                    Socket.updateComponent(req.params.userId, 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{
@@ -770,6 +814,7 @@ function createRouter(dependencies = {}) {
                 throw new Error('Guest can not use fileSystem.LS');
             }
             else {
+                WebSocet.sendJSONres(req.User, 'socket msg: on list WorkspaceList')
                 // 訪問userId的根目錄（WorkingSpace/repository）
                 LoadWSList(req.params.userId, (payLoad)=> {
                     res.json(payLoad)

@@ -6,6 +6,7 @@ const SECRET = 'YOUR_JWT_SECRET';
 // 初始化自訂服務
 const WF = require('../utilities/workingFuction')
 const MCS = require('../services/MongoService')
+const WebSocet = require('../utilities/Socket')
 const jwtVerifier = require('../middlewares/verifyJWT')
 
 function createRouter(dependencies) {
@@ -38,11 +39,9 @@ function createRouter(dependencies) {
 
     router.get('/singOut/:userId', jwtVerifier(), function (req, res, next) {
         if(req.User == req.params.userId) {
-            if(req.User === 'Guest') {
                 res.clearCookie('token').json({
                     message: 'signOut sucess!'
                 })
-            }
         }
         else {
             throw new Error('no jwt token, plz login to use your workingSpace')

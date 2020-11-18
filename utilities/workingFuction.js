@@ -436,7 +436,14 @@ var deleteFolderRecursive = (path) => {
    async function deleteFile(userId,Wsname,relativepath, fileNmae){
     let taeget = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath, fileNmae);
     let targetDir = ph.join(process.env.ROOTPATH, userId, 'Workspace', Wsname, 'AppRoot', relativepath);
-    fs.unlinkSync(taeget);
+    let status = fs.statSync(taeget);
+    if( status.isFile()) {
+        fs.unlinkSync(taeget);
+    }
+    else {
+        console.log('Delete path : ' + taeget)
+        deleteFolderRecursive(taeget);
+    }
     let payload = LStargetDir(targetDir)
     return payload;
 }
