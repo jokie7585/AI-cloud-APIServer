@@ -177,6 +177,26 @@ yargs(hideBin(process.argv))
   })
   .argv
 
+  yargs(hideBin(process.argv))
+  .command('shedule', 'none', (yargs) => {
+    
+  }, (argv) => {
+    http.get(ph.join(env.SchedulerBaseURL, 'forceStart'), (res) => {
+        res.setEncoding('utf8');
+        let rawData = '';
+        res.on('data', (chunk) => { rawData += chunk; });
+        res.on('end', () => {
+            try {
+            const parsedData = JSON.parse(rawData);
+            console.log(parsedData);
+            } catch (e) {
+            console.error(e.message);
+            }
+        });
+    })
+  })
+  .argv
+
 
   function dispatchToServer(payload) {
     const req = http.request(ph.join(env.SchedulerBaseURL, 'dispatchEvent'),{
