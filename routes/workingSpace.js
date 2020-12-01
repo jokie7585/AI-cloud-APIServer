@@ -6,9 +6,10 @@ const veriftJWT = require('../middlewares/verifyJWT.js');
 const pathSolver = require('../middlewares/pathSolver.js');
 const {UploadJobToCytus_2,RunBatchWork,deleteFile,loadWorkspaceCach,cachWorkspace,resetWorkspaceRoot, LS,LoadWSList,getFileContentAsString , DeleteWorkspace,CreateWorkspace, GenerateYaml,UploadJobToCytus} = require('../utilities/workingFuction.js');
 const MCS = require('../services/MongoService')
-const WebSocet = require('../utilities/Socket')
 const {AppError, errorType} = require('../utilities/AppError');
 const Socket = require('../utilities/Socket');
+let {UploadJobToSceduler, RemovefromSceduler} = require('../utilities/CytusCTL/Cytus');
+const Cytus = require('../utilities/CytusCTL/Cytus');
 
 function createRouter(dependencies = {}) {
     // get dependencies
@@ -25,13 +26,19 @@ function createRouter(dependencies = {}) {
         },
         filename: function (req, file, callBack) {
             let relativePath = file.originalname.split('/');
-            relativePath = relativePath.slice(1, relativePath.length-1);
-            let processedPath = path.join(req.multerdestination, ...relativePath);
-            fs.mkdir(processedPath, {recursive: true}, err => {
-                // do Nothing
-            })
             console.log('filePathFromUserhost: ' + file.originalname)
-            callBack(null, file.originalname.split('/').slice(1).join('/'));
+            relativePath = relativePath.slice(0, relativePath.length-1);
+            console.log(relativePath)
+            if(relativePath.length > 0) {
+                let processedPath = path.join(req.multerdestination, ...relativePath);
+                fs.mkdir(processedPath, {recursive: true}, err => {
+                    // do Nothing
+                })
+                callBack(null, file.originalname.split('/').slice(1).join('/'));
+            }
+            else {
+                callBack(null, file.originalname);
+            }
         }
     })
     // 初始化multer
@@ -259,11 +266,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=> {
                     // process here
                     console.log('process get workspace config:')
-                    let {tensorflowVersion,GpuNum} = doc.getConfig({WsName:req.params.workspaceName});
-                    res.json({
-                        tensorflowVersion:tensorflowVersion,
-                        GpuNum:GpuNum
-                    })
+                    res.json(doc.getConfig({WsName:req.params.workspaceName}))
                 })
             }
         }
@@ -509,7 +512,7 @@ function createRouter(dependencies = {}) {
                         userId: req.User,
                         config: doc.getConfig({WsName: req.params.workspaceName}),
                         scheduleList: doc.getscheduleList({WsName: req.params.workspaceName}),
-                        commandList: doc.getcommandList({WsName: req.params.workspaceName}),
+                        commandList: doc.getcommandList({WsName: req.params.workspaceName}).commandList,
                         WsName: req.params.workspaceName,
                         credential: req.cookies.token,
                         logPath: newRecord.logPath,
@@ -518,9 +521,22 @@ function createRouter(dependencies = {}) {
                     
                     GenerateYaml(payLoad)
                     .then(message => {
-                        // run jobUploader
-                        let {podName, userId, WsName, config} = payLoad
-                        UploadJobToCytus(podName, config.GpuNum, userId, WsName)
+                        // new code
+                        let config = doc.getConfig({WsName: req.params.workspaceName})
+
+                        let jobinfo = {
+                            userId: req.params.userId,
+                            workspace: req.params.workspaceName,
+                            branch: 'Template',
+                            podName: newRecord.podName,
+                            yamlPath: path.join(process.env.ROOTPATH, req.params.userId, 'Workspace', req.params.workspaceName, '.secrete/podConfig.yaml'),
+                            gpuRequest: config.GpuNum,
+                            CpuRequest: config.CpuRequest,
+                            MemoryRequest: config.MemoryCapacity
+                        }
+
+                        
+                        UploadJobToSceduler([jobinfo])
                         .then((msg) => {
                             console.log(msg.stdout.toString());
                             console.log(msg.stderr.toString());
@@ -537,8 +553,30 @@ function createRouter(dependencies = {}) {
                                 message: 'server side error occurs, plz contact us!'
                             })
                         })
-                        // async log GenerateYaml's message here
-                        console.log(message);
+                        // new code end
+
+                        // oldcode start
+                        // run fake jobUploader
+                        // let {podName, userId, WsName, config} = payLoad
+                        // UploadJobToCytus(podName, config.GpuNum, userId, WsName)
+                        // .then((msg) => {
+                        //     console.log(msg.stdout.toString());
+                        //     console.log(msg.stderr.toString());
+                        //     doc.save()
+                        //     .then(() => {
+                        //         res.json({
+                        //             message: 'successful submit jub to Cytus!'
+                        //         })
+                        //     })
+                        // })
+                        // .catch((err) => {
+                        //     console.log(err.toString())
+                        //     res.status(500).json({
+                        //         message: 'server side error occurs, plz contact us!'
+                        //     })
+                        // })
+                        // // async log GenerateYaml's message here
+                        // console.log(message);
                     })
                     .catch(err => {
                         console.log(err.toString());
@@ -582,30 +620,66 @@ function createRouter(dependencies = {}) {
                     RunBatchWork(payLoad)
                     .then(newbranchset => {
                         // "newbranchset" 內所有的工作都上傳到Cetus
+                        // new code
+                        let config = doc.getConfig({WsName: req.params.workspaceName})
+
+                        newbranchset.forEach(el => {
+                            let jobinfo = {
+                                userId: req.params.userId,
+                                workspace: req.params.workspaceName,
+                                branch: el.branchName,
+                                podName: el.podName,
+                                yamlPath: el.yamalPath,
+                                gpuRequest: config.GpuNum,
+                                CpuRequest: config.CpuRequest,
+                                MemoryRequest: config.MemoryCapacity
+                            }
+    
+                            
+                            UploadJobToSceduler([jobinfo])
+                            .then((msg) => {
+                                // console.log(msg.stdout.toString());
+                                // console.log(msg.stderr.toString());
+                                
+                            })
+                            .catch((err) => {
+                                console.log(err.toString())
+                                throw new Error('UploadJobToSceduler fail')
+                            })
+                        })
+
+                        doc.save()
+                            .then(() => {
+                                res.json({
+                                    message: 'successful submit jub to Cytus!'
+                                })
+                            })
+                       
+                        // new code end
                         /**
                          *  ~ <Code> ~
                          */
-                        // run jobUploader
-                        UploadJobToCytus_2(newbranchset)
-                        .then( msg => {
-                            console.log(msg);
-                            doc.save()
-                            .then(() => {
-                                res.json({
-                                    message: 'successful submit batch to Cytus!'
-                                })
-                            })
-                            .catch(err => {
-                                console.log(err)
-                            })
-                        })
-                        .catch((err) => {
-                            console.log('fail push batch to Cetus');
-                            console.log(err.toString())
-                            res.status(500).json({
-                                message: 'server side error occurs, plz contact us!'
-                            })
-                        })
+                        // run fakejobUploader
+                        // UploadJobToCytus_2(newbranchset)
+                        // .then( msg => {
+                        //     console.log(msg);
+                        //     doc.save()
+                        //     .then(() => {
+                        //         res.json({
+                        //             message: 'successful submit batch to Cytus!'
+                        //         })
+                        //     })
+                        //     .catch(err => {
+                        //         console.log(err)
+                        //     })
+                        // })
+                        // .catch((err) => {
+                        //     console.log('fail push batch to Cetus');
+                        //     console.log(err.toString())
+                        //     res.status(500).json({
+                        //         message: 'server side error occurs, plz contact us!'
+                        //     })
+                        // })
                     })
                     .catch(err => {
                         console.log(err.toString());
@@ -761,6 +835,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=>{
                     console.log('set record finished:')
                     console.log(newRecord)
+                    RemovefromSceduler(newRecord)
                     Socket.updateComponent(req.params.userId, 'batchComponent')
                     res.send();
                 })
@@ -814,7 +889,7 @@ function createRouter(dependencies = {}) {
                 throw new Error('Guest can not use fileSystem.LS');
             }
             else {
-                WebSocet.sendJSONres(req.User, 'socket msg: on list WorkspaceList')
+                Socket.sendJSONres(req.User, 'socket msg: on list WorkspaceList')
                 // 訪問userId的根目錄（WorkingSpace/repository）
                 LoadWSList(req.params.userId, (payLoad)=> {
                     res.json(payLoad)
@@ -825,6 +900,13 @@ function createRouter(dependencies = {}) {
         else {
             throw new Error('no jwt token, plz login to use your workingSpace')
         }
+    })
+
+    router.get('/:userId/get_notification',veriftJWT(),function(req, res, next) {
+        MCS.getdocInstance({account: req.params.userId})
+        .then(doc => {
+            res.json(doc.GetNotification());
+        })
     })
 
     // create new folder at given path, than reponse message

@@ -2,7 +2,7 @@ const _ = require('lodash');
 const SocketServer = require('ws').Server
 const jsonwebtoken = require('jsonwebtoken');
 const SECRET = 'YOUR_JWT_SECRET';
-const MSC = require('../services/MongoService')
+const MSC = require('../services/MongoService');
 
 let cetusSocket;
 let initMessage = 'success set cetusSocket on req'
@@ -10,9 +10,6 @@ let initMessage = 'success set cetusSocket on req'
 class CetusSocket {
     wss;
     clients = {};
-
-      constructor() {
-      }
 
       initSocketUseExistServer(server) {
         this.wss = new SocketServer({
@@ -50,6 +47,20 @@ class CetusSocket {
                 ReqInfo: req,
                 socket: ws
             }
+
+            ws.on('message', (data) => {
+
+            })
+
+            ws.on('close', () => {
+                for(let client in this.clients) {
+                    if(this.clients[client].jwtPayload.username == client) {
+                        delete this.clients[client]
+                        console.log('Remove Client Disconnect Obj: ' + client)
+                        return
+                    }
+                }
+            })
             
             this.listClient();
         })
@@ -81,13 +92,13 @@ class CetusSocket {
         }
       }
 
-      acceptConnection() {
+      IsacceptConnection() {
 
       }
 
 
       /**
-       * CetusSocket Methode
+       * CetusSocket Methode start below
        */
 
       listClient() {
@@ -99,6 +110,7 @@ class CetusSocket {
         this.clients[useerId].socket.send(JSON.stringify(resObj))
       }
 
+      // updateComponent makes an component forced update
       updateComponent(useerId, target) {
         this.sendJSONres(useerId, {
             action: 'update',
@@ -107,6 +119,9 @@ class CetusSocket {
             }
         })
       }
+
+      // event(message) processor
+
 
       pin() {
 

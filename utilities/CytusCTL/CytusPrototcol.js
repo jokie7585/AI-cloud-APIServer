@@ -34,9 +34,15 @@ const CytusException = {
 
 }
 
+const CytusBatchConst = {
+    CytusTrue:'True',
+    CytusFalse:'False'
+}
+
 
 module.exports = {
     CytusEvent,
     CytusAppStatus,
-    CytusBatchStatus
+    CytusBatchStatus,
+    CytusBatchConst,
 }

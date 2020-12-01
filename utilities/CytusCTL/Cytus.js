@@ -39,33 +39,7 @@ yargs(hideBin(process.argv))
         }
     }
     
-    const req = http.request(ph.join(env.SchedulerBaseURL, 'dispatchEvent'),{
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(JSON.stringify(payload))
-        }
-      }, res => {
-        res.setEncoding('utf8');
-        let rawData = '';
-        res.on('data', (chunk) => { rawData += chunk; });
-        res.on('end', () => {
-            try {
-            const parsedData = JSON.parse(rawData);
-            console.log(parsedData);
-            } catch (e) {
-            console.error(e.message);
-            }
-        });
-      })
-
-      req.on('error', (e) => {
-        console.error(`problem with request: ${e.message}`);
-      });
-      
-      // Write data to request body
-      req.write(JSON.stringify(payload));
-      req.end();
+    dispatchToServer(payload);
   })
   .option('all', {
     alias: 'a',
@@ -115,33 +89,7 @@ yargs(hideBin(process.argv))
 
       console.log('in push')
 
-      const req = http.request(ph.join(env.SchedulerBaseURL, 'dispatchEvent'),{
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(JSON.stringify(payload))
-        }
-      }, res => {
-        res.setEncoding('utf8');
-        let rawData = '';
-        res.on('data', (chunk) => { rawData += chunk; });
-        res.on('end', () => {
-            try {
-            const parsedData = JSON.parse(rawData);
-            console.log(parsedData);
-            } catch (e) {
-            console.error(e.message);
-            }
-        });
-      })
-
-      req.on('error', (e) => {
-        console.error(`problem with request: ${e.message}`);
-      });
-      
-      // Write data to request body
-      req.write(JSON.stringify(payload));
-      req.end();
+      dispatchToServer(payload);
   })
   .option('JobJsonString', {
     alias: 'j',
@@ -162,7 +110,7 @@ yargs(hideBin(process.argv))
 
 
   yargs(hideBin(process.argv))
-  .command('remove', 'start the server', (yargs) => {
+  .command('remove <type>', 'start the server', (yargs) => {
     
   }, (argv) => {
 
@@ -180,33 +128,8 @@ yargs(hideBin(process.argv))
     }
     
 
-    const req = http.request(ph.join(env.SchedulerBaseURL, 'dispatchEvent'),{
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(JSON.stringify(payload))
-        }
-      }, res => {
-        res.setEncoding('utf8');
-        let rawData = '';
-        res.on('data', (chunk) => { rawData += chunk; });
-        res.on('end', () => {
-            try {
-            const parsedData = JSON.parse(rawData);
-            console.log(parsedData);
-            } catch (e) {
-            console.error(e.message);
-            }
-        });
-      })
-
-      req.on('error', (e) => {
-        console.error(`problem with request: ${e.message}`);
-      });
-      
-      // Write data to request body
-      req.write(JSON.stringify(payload));
-      req.end();
+    dispatchToServer(payload);
+    
   })
   .option('name', {
     alias: 'n',
@@ -220,6 +143,19 @@ yargs(hideBin(process.argv))
   })
   .argv
 
+
+  yargs(hideBin(process.argv))
+  .command('nodeManage <action> [target]', 'start the server', (yargs) => {
+    
+  }, (argv) => {
+    if(argv.action == disable) {
+
+    }
+    else if(argv.action == enable) {
+        
+    }
+  })
+  .argv
 
   yargs(hideBin(process.argv))
   .command('pin', 'start the server', (yargs) => {
@@ -242,3 +178,75 @@ yargs(hideBin(process.argv))
   .argv
 
 
+  function dispatchToServer(payload) {
+    const req = http.request(ph.join(env.SchedulerBaseURL, 'dispatchEvent'),{
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(JSON.stringify(payload))
+        }
+      }, res => {
+        res.setEncoding('utf8');
+        let rawData = '';
+        res.on('data', (chunk) => { rawData += chunk; });
+        res.on('end', () => {
+            try {
+            const parsedData = JSON.parse(rawData);
+            console.log(parsedData);
+            } catch (e) {
+                console.error(e.message);
+            }
+        });
+      })
+
+      req.on('error', (e) => {
+        console.error(`problem with request: ${e.message}`);
+      });
+      
+      // Write data to request body
+      req.write(JSON.stringify(payload));
+      req.end();
+  }
+
+
+  async function UploadJobToSceduler(jobinfoArray ) {
+
+    for (let job of jobinfoArray) {
+        let payload = {
+            method: 'push',
+            payload: {
+                job : {
+                    userId: job.userId,
+                    workspace: job.workspace,
+                    branch: job.branch,
+                    podName: job.podName,
+                    yamlPath: job.yamlPath,
+                    gpuRequest: job.gpuRequest,
+                    CpuRequest: job.CpuRequest,
+                    MemoryRequest: job.MemoryRequest
+                }
+            }
+        }
+
+        dispatchToServer(payload);
+        console.log({apiServerDispatch: payload})
+    }
+  }
+
+  function RemovefromSceduler(batchConf) {
+    // modifieds
+
+    payload = {
+        method:'remove',
+        payload: batchConf.podname
+    }
+
+    dispatchToServer(payload);
+
+    return batchConf;
+  }
+
+
+  module.exports={
+    UploadJobToSceduler, RemovefromSceduler
+  }

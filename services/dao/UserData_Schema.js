@@ -1,6 +1,6 @@
 var mongoose = require('mongoose');
 var ph = require('path');
-const { string } = require('yargs');
+const { string, number, boolean } = require('yargs');
 var cytus = require('../../utilities/CytusCTL/CytusPrototcol')
 // subDOC
 
@@ -9,7 +9,10 @@ var batch_Schema = new mongoose.Schema({
     discription: String,
     commandTemplete: [{
         command: String,
-        optionMap: [String]
+        optionMap: [{
+            name: String,
+            type: 'flag' | 'option' | 'counter' | 'position'
+        }]
     }],
     status: String,
     branchSet: [{
@@ -18,6 +21,7 @@ var batch_Schema = new mongoose.Schema({
             optionMap: [{
                 name: String,
                 value: String, // if empty, its an boolean flag
+                type: 'flag' | 'option' | 'counter' | 'position'
             }]
         }],
         logPath: String,
@@ -38,6 +42,8 @@ var workspaceSet_Schema = new mongoose.Schema({
     config: {
         tensorflowVersion: String,
         GpuNum:Number,
+        MemoryCapacity: String,
+        CpuRequest: Number
     },
     notification: [{
         type: String,
@@ -75,9 +81,12 @@ var workMonitor_Schema = new mongoose.Schema({
     },
     notyfication: [
         {
-            type:String,
+            type:String, // type='workspace'|'system'
+            isread: Boolean,
             Title:String,
+            Timestamp: Date,
             Message:String,
+            payload: {}
         }
     ],
     history: [
@@ -113,7 +122,7 @@ UserData_Schema.methods.CreateWorkspaceRecord = function({WsName}) {
     let newConfigRecord = {
         name: WsName,
         LastPodName: null,
-        config: {tensorflowVersion: 'Init',GpuNum: 0},
+        config: {tensorflowVersion: undefined,GpuNum: undefined, MemoryCapacity:undefined, CpuRequest: undefined},
         scheduleList:[],
         workRecord:[]
     }
@@ -145,12 +154,18 @@ UserData_Schema.methods.getConfig = function({WsName}) {
         if(element.name === WsName) {
             console.log('in getConfig of : ' + WsName);
             console.log({config: element.config})
-            return element.config;
+            if(element.config) {
+                return element.config;
+            }
+            else {
+                return {
+                    tensorflowVersion: undefined,
+                    GpuNum: undefined,
+                    MemoryCapacity: undefined,
+                    CpuRequest: undefined,
+                }
+            }
         }
-    };
-    return {
-        tensorflowVersion:'',
-        GpuNum:''
     };
 };
 
@@ -208,9 +223,43 @@ UserData_Schema.methods.getBranchcommandList = function({WsName, branch}) {
             // compose CommandList
             for(let command of element.CommandList) {
                 let composedCmd = command.command;
-                for( let flag of command.optionMap ) {
-                    composedCmd = composedCmd.concat(' ', `${flag.name}==${flag.value}`)
+
+                let positionParam = []
+                let flagParam = []
+                let optionParam = []
+
+                for(let el of command.optionMap) {
+                    if(el.type == 'position') {
+                        positionParam.push(el)
+                    }
+                    else if(el.type == 'flag') {
+                        flagParam.push(el)
+                    }
+                    else if(el.type == 'option') {
+                        optionParam.push(el)
+                    }
                 }
+
+                console.log({optionParam:optionParam})
+
+                // process position
+                for(let param of positionParam) {
+                    composedCmd = composedCmd.concat(' ', `${param.name}`)
+                }
+
+                // process flag
+                for(let flag of flagParam) {
+                    if(flag.value == cytus.CytusBatchConst.CytusTrue) {
+                        composedCmd = composedCmd.concat(' ', `${flag.name}`)
+                    }
+                }
+                
+                for(let option of optionParam ) {
+                    composedCmd = composedCmd.concat(' ', `${option.name}=${option.value}`)    
+                }
+
+                console.log('processed cmd: ' + composedCmd)
+
                 ProcessedcommandList.push(composedCmd)
             }
 
@@ -483,6 +532,45 @@ UserData_Schema.methods.GetBatchConfig = function({WsName}) {
 
     // if no LastPod
     return curWorkspace.batchConfig;
+}
+
+UserData_Schema.methods.AddSystemNotification = function(Title, Message, link) {
+    let date = new Date()
+    let notyfication_record = {
+        type:'system', // type='workspace'|'system'
+        isread: false,
+        Title:Title,
+        Timestamp: date,
+        Message:Message,
+        payload:{
+            routerLink: link
+        }
+    } 
+
+    this.Monitor.notyfication = [notyfication_record, ...this.Monitor.notyfication];
+    
+}
+
+UserData_Schema.methods.AddWorkspaceNotification = function(WsName,Title, Message,workload,branch) {
+    let date = new Date()
+    let notyfication_record = {
+        type:'workspace', // type='workspace'|'system'
+        isread: false,
+        Title:Title,
+        Timestamp: date,
+        Message:Message,
+        paload:{
+            workspace: WsName,
+            branch: branch,
+            workload: workload
+        }
+    } 
+
+    this.Monitor.notyfication = [notyfication_record, ...this.Monitor.notyfication];
+}
+
+UserData_Schema.methods.GetNotification = function() {
+    return this.Monitor.notyfication;
 }
 
 // compile schema to modle

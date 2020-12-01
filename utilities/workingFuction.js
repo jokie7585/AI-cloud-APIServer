@@ -6,7 +6,7 @@ var cytus = require('./CytusCTL/CytusPrototcol')
 const fsPromise = fs.promises;
 var {spawnSync, execFileSync} = require('child_process');
 const { identity } = require('lodash');
-const { CytusAppStatus } = require('./CytusCTL/CytusPrototcol');
+const { CytusAppStatus, CytusBatchConst } = require('./CytusCTL/CytusPrototcol');
 const { option } = require('yargs');
 
 
@@ -255,7 +255,7 @@ function createBashArgs(ScheduleList, BatchCommandList) {
     shellScript = shellScript.concat(`curl $APISERVER_IP/users/$USERID/management/api/workRecord/setRunning/$WsName/$branch ;`);
     // 初始化logFile
     shellScript = shellScript.concat('echo "your application log start below..." > $LogPath;');
-    for (command of ScheduleList) {
+    for (let command of ScheduleList) {
         if(command[0] != '#') {
             shellScript = shellScript.concat(command + ' >> $LogPath 2>&1;');
         }
@@ -324,6 +324,7 @@ var deleteFolderRecursive = (path) => {
     // let scriptPath = ph.join(process.cwd(), 'utilities/CytusCTL/jobUploader.js')
     // let stdout = execFileSync(scriptPath ,['-n', podname, '-p', yamlpath, '-g', gpunumber], {encoding:'utf-8'})
     // return stdout
+    
     return spawnSync('kubectl', ['create', '-f', yamlpath]);
   }
 
@@ -457,7 +458,7 @@ var deleteFolderRecursive = (path) => {
 
    async function RunBatchWork(payload){
     let {batchset, userId, WsName, config, scheduleList, commandList, credential} = payload;
-    let newbatchset = []
+    let batchregistPayload = []
     // 準備資料夾
     let SourceRoot = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName, 'AppRoot');
     let rootOfBranch = ph.join(process.env.ROOTPATH, userId, 'Workspace', WsName);
@@ -491,8 +492,8 @@ var deleteFolderRecursive = (path) => {
         branch.root = root
         branch.yamalPath = yamalPath
         branch.status = CytusAppStatus.WAIT
-        // push into "newbatchset" structure
-        newbatchset.push(registPayload)
+        // push into "batchregistPayload" structure
+        batchregistPayload.push(registPayload)
 
         // clean old branch root
         deleteFolderRecursive(root);
@@ -506,7 +507,7 @@ var deleteFolderRecursive = (path) => {
 
     }
 
-    return newbatchset
+    return batchregistPayload
     
 }
 
@@ -644,12 +645,38 @@ function createBashArgs_BatchUse(ScheduleList) {
 
 function composeCommandFlag(command, optionMap) {
     let fullCommand = command;
+    // proceess postion params first
+    // 找出position 先行解決
+    let positionParam = []
+    let nonePositionParam = []
     for (el of optionMap) {
-        if(el.value == 'true' || el.value == 'false' ) {
-
+        if(el.type == 'position') {
+            positionParam.push(el);
         }
         else {
-            fullCommand = fullCommand + ' ' +  `${el.name}=${el.value}`
+            nonePositionParam.push(el);
+        }
+    }
+
+    // position 參數寫入
+    for (el of positionParam) {
+        if(el.value != '') {
+            fullCommand = fullCommand + ' ' +  `${el.value}`
+        }
+    }
+    
+    // optional & flag寫入
+    for (el of nonePositionParam) {
+        let nameOfParam = el.name.match(/[--]{0,2}([A-Z_a-z][A-Z_a-z0-9]*)/)[1];
+        if(el.type == 'flag') {
+            if(el.value == CytusBatchConst.CytusTrue) {
+                fullCommand = fullCommand + ' ' +  `-${nameOfParam.charAt(0)}`
+            }
+        }
+        else if(el.type == 'option') {
+            if(el.value && el.value != '') {
+                fullCommand = fullCommand + ' ' +  `--${nameOfParam}=${el.value}`
+            }
         }
     }
 
