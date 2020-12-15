@@ -460,7 +460,9 @@ UserData_Schema.methods.Set_LastPod_Finished = function({WsName}) {
             element.status = cytus.CytusAppStatus.COMPLETE;
             let time = new Date();
             element.timeEnd = time
-            return element;
+            return {
+                podname: element.podName
+            }
         }
     }
 

@@ -538,8 +538,6 @@ function createRouter(dependencies = {}) {
                         
                         UploadJobToSceduler([jobinfo])
                         .then((msg) => {
-                            console.log(msg.stdout.toString());
-                            console.log(msg.stderr.toString());
                             doc.save()
                             .then(() => {
                                 res.json({
@@ -793,7 +791,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=>{
                     console.log('set record running:')
                     console.log(newRecord)
-                    Socket.updateComponent(req.params.userId, 'batchComponent')
+                    Socket.updateComponent(req.params.userId,req.params.workspaceName, 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{
@@ -836,7 +834,7 @@ function createRouter(dependencies = {}) {
                     console.log('set record finished:')
                     console.log(newRecord)
                     RemovefromSceduler(newRecord)
-                    Socket.updateComponent(req.params.userId, 'batchComponent')
+                    Socket.updateComponent(req.params.userId,req.params.workspaceName, 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{

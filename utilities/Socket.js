@@ -111,11 +111,12 @@ class CetusSocket {
       }
 
       // updateComponent makes an component forced update
-      updateComponent(useerId, target) {
+      updateComponent(useerId,ws, target) {
         this.sendJSONres(useerId, {
             action: 'update',
             body: {
-                target:target
+                target:target,
+                ws: ws
             }
         })
       }
@@ -124,7 +125,7 @@ class CetusSocket {
 
 
       pin() {
-
+        console.log('socket here')
       }
 
       pon() {
@@ -138,8 +139,8 @@ function initSocketUseExistServer(server) {
     cetusSocket.initSocketUseExistServer(server);
 }
 
-function updateComponent(useerId, target) {
-    cetusSocket.updateComponent(useerId, target)
+function updateComponent(useerId,ws, target) {
+    cetusSocket.updateComponent(useerId,ws, target)
   }
 
 function sendJSONres(useerId,resObj) {
@@ -172,5 +173,9 @@ function VrifyJWT(jwt) {
     return payload;
 }
 
+function pin() {
+    cetusSocket.pin()
+}
 
-module.exports = {initSocketUseExistServer,sendJSONres, updateComponent}
+
+module.exports = {pin,initSocketUseExistServer,sendJSONres, updateComponent}

@@ -37,6 +37,7 @@ server.on('listening', onListening);
  */
  
  cetusSocket.initSocketUseExistServer(server);
+ cetusSocket.pin()
 
 /**
  * Normalize a port into a number, string, or false.
