@@ -791,7 +791,7 @@ function createRouter(dependencies = {}) {
                 .then(doc=>{
                     console.log('set record running:')
                     console.log(newRecord)
-                    Socket.updateComponent(req.params.userId,req.params.workspaceName, 'batchComponent')
+                    Socket.updateComponent(req.params.userId,doc.GetBatchConfig({WsName: req.params.workspaceName}), 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{
@@ -834,7 +834,7 @@ function createRouter(dependencies = {}) {
                     console.log('set record finished:')
                     console.log(newRecord)
                     RemovefromSceduler(newRecord)
-                    Socket.updateComponent(req.params.userId,req.params.workspaceName, 'batchComponent')
+                    Socket.updateComponent(req.params.userId,doc.GetBatchConfig({WsName: req.params.workspaceName}), 'batchComponent')
                     res.send();
                 })
                 .catch(err=>{
