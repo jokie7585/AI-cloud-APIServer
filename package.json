@@ -6,7 +6,7 @@
     "start": "PORT=3001 node ./bin/www",
     "startdb": "docker run --name mongo4 -v $(pwd)/data:/data/db -d -p 27017:27017 --rm mongo:4.1",
     "startMQ": "docker run --rm --name rabbitmq -p 5672:5672 rabbitmq:3.8",
-    "setKubectl" : "cp -f ./config.json ~/.kube"
+    "setKubectl" : "cp -f ./config ~/.kube"
   },
   "dependencies": {
     "cookie-parser": "~1.4.4",
