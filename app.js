@@ -9,6 +9,7 @@ var fs = require('fs');
 // set ENV
 require('dotenv').config();
 
+
 // check root dir exist
 try {
   fs.accessSync(process.env.ROOTPATH, fs.constants.R_OK | fs.constants.W_OK);
