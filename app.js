@@ -35,6 +35,8 @@ const corsOption = {
 }
 
 
+console.log('add cors ip : ' + process.env.FrontendIP)
+
 
 // 建立Mongoservice(自定義service)
 const MongoService = require('./services/MongoService.js');
