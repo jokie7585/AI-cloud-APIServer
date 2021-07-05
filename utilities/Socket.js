@@ -36,7 +36,7 @@ class CetusSocket {
               // should not be compressed.
             }
         });
-
+        
         this.wss.on('connection', (ws, req) => {
             //連結時執行此 console 提示
             console.log('Client connected')

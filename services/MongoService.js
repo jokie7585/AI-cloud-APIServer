@@ -1,11 +1,12 @@
 const mongoose = require('mongoose')
 const Modle_UserData = require('./dao/UserData_Schema')
-const url = process.env.MongoIp || 'mongodb://localhost:27017/myAICloud-Database';
 const ph = require('path')
 let db;
 let isDBOn = false;
 
 function init() {
+    let url = process.env.MongoIp || 'mongodb://localhost:27017/myAICloud-Database';
+    console.log( "connect to mongo url: " + url )
     mongoose.connect(url, {useNewUrlParser: true, useUnifiedTopology: true})
     .catch(err => {
         isDBOn = false;

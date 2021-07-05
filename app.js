@@ -4,9 +4,27 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
+var fs = require('fs');
 
 // set ENV
 require('dotenv').config();
+
+// check root dir exist
+try {
+  fs.accessSync(process.env.ROOTPATH, fs.constants.R_OK | fs.constants.W_OK);
+  console.log('root exist, and permission ok!');
+} catch (err) {
+  console.error('root is not exist, or permission denied!');
+  console.log('create root...');
+  try {
+    fs.mkdirSync( process.env.ROOTPATH )
+    console.log('root created');
+  } catch (error) {
+    console.error(error);
+  }
+  
+}
+
 
 // configure cors
 const corsOption = {
@@ -14,23 +32,6 @@ const corsOption = {
   "credentials": true,
   "exposedHeaders":["Content-Disposition","X-AICLOUD-ENDLOG"]
 }
-
-// const MongoClient = require('mongodb').MongoClient;
-
-// // 預先建立與mongodb的連線
-// // 1. 建立client物件
-// const url = 'mongodb://localhost:27017';
-// const dbName = 'myproject';
-// const client = new MongoClient(url, {useNewUrlParser: true, useUnifiedTopology: true});
-
-// // 2.使用client物件建立連線
-// client.connect()
-//     .then((connectedClient)=>{
-//       console.log('mongodb connected');
-//     })
-//     .catch(error => {
-//       console.error(error);
-//     })
 
 
 
