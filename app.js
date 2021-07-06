@@ -5,6 +5,7 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 var cors = require('cors');
 var fs = require('fs');
+var {execFileSync} = require('child_process')
 
 // set ENV
 require('dotenv').config();
@@ -41,6 +42,16 @@ console.log('add cors ip : ' + process.env.FrontendIP)
 // 建立Mongoservice(自定義service)
 const MongoService = require('./services/MongoService.js');
 MongoService.init();
+
+// test aks server
+console.log('test and pin aks nodes : ')
+try {
+  let result = execFileSync('kubectl', ['get',' nodes'] ,{env:process.env})
+  console.log(result.toString())
+} catch (error) {
+  console.log('attach aks failed, contact penying tsai to solve it! ')
+}
+
 
 // 建立使用者權限api
 const {createRouter: creatAuthRoter} = require('./routes/authRouter.js');
