@@ -46,7 +46,7 @@ MongoService.init();
 // test aks server
 console.log('test and pin aks nodes : ')
 try {
-  let result = execFileSync('kubectl', ['get',' nodes'] ,{env:process.env})
+  let result = execFileSync('kubectl', ['get','nodes'] ,{env:process.env})
   console.log(result.toString())
 } catch (error) {
   console.log('attach aks failed, contact penying tsai to solve it! ')
